@@ -362,14 +362,22 @@ function drawFlipper(f, image) {
   if (image) {
     ctx.save();
     ctx.translate(f.pivot.x, f.pivot.y);
-    ctx.rotate(f.side === 'left' ? f.angle : f.angle - Math.PI);
+
+    // Rotating by the bat's own angle puts the sprite's +x along pivot-to-tip,
+    // which is right for both sides, since `flipperTip` is defined the same way
+    // for each. No horizontal mirroring is needed at all.
+    ctx.rotate(f.angle);
+
+    // The sprite carries its rubber edge along the bottom, and the ball always
+    // arrives on the upper face. After the rotation above that edge already
+    // faces the ball on the right hand bat, and faces away on the left, so only
+    // the left one is flipped. Without this the ball visibly bounces off bare
+    // iron while the rubber sits on the side nothing ever touches.
+    if (f.side === 'left') ctx.scale(1, -1);
+
     const h = f.radius * 2 * 1.6;
     const w = f.length * 1.08;
-    if (f.side === 'left') ctx.drawImage(image, -w * 0.06, -h / 2, w, h);
-    else {
-      ctx.scale(-1, 1);
-      ctx.drawImage(image, -w * 0.06, -h / 2, w, h);
-    }
+    ctx.drawImage(image, -w * 0.06, -h / 2, w, h);
     ctx.restore();
     return;
   }
