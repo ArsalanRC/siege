@@ -171,6 +171,36 @@ describe('the ball stays on the table', () => {
     }
   });
 
+  it('gives the ball the run of the table, not just the side it was launched up', () => {
+    // Reported from play, not caught here: at full power the ball went up the
+    // right, rattled along the top, came back down the right and drained. It
+    // never once crossed to the left half. Every earlier test passed throughout,
+    // because they only ever asked whether the ball got stuck or left the table,
+    // and it did neither. It was simply not a game.
+    //
+    // The route between the two orbits is the corridor over the castle roof, so
+    // this is really a test that the corridor is passable.
+    const g = createGame();
+    launch(g, 1);
+
+    let reachedLeft = false;
+    let reachedRight = false;
+    let reachedLower = false;
+
+    for (let i = 0; i < 5400; i++) {
+      const drained = stepGame(g, NO_INPUT, DT).some((e) => e.kind === 'drain');
+      const { x, y } = g.ball.pos;
+      if (x < 232 && y > 100 && y < 495) reachedLeft = true;
+      if (x > 800 && y > 100 && y < 495) reachedRight = true;
+      if (y > 700 && x > 200 && x < 800) reachedLower = true;
+      if (drained) break;
+    }
+
+    expect(reachedRight, 'never used the right orbit').toBe(true);
+    expect(reachedLeft, 'never crossed to the left orbit').toBe(true);
+    expect(reachedLower, 'never came down into the middle of the table').toBe(true);
+  });
+
   it('never wedges the ball anywhere, however the flippers are played', () => {
     // The version of this that only ran with NO_INPUT missed a real wedge,
     // because a ball that is never flipped never reaches the corners a played
