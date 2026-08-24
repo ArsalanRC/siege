@@ -65,7 +65,7 @@ Sicherheitsgarantie still und leise.
 
 ```sh
 pnpm install
-pnpm test        # 76 Tests, alle ohne Browser
+pnpm test        # 77 Tests, alle ohne Browser
 pnpm typecheck
 pnpm build:site  # legt die Engine nach site/lib
 ```
