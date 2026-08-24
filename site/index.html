@@ -20,24 +20,6 @@
       <div class="stage">
         <canvas id="table" width="1024" height="1536"></canvas>
 
-        <div class="hud" aria-live="polite">
-          <div class="panel">
-            <span class="label" data-i18n="hud.score">Score</span>
-            <span class="value" id="score">0</span>
-          </div>
-          <div class="panel">
-            <span class="label" data-i18n="hud.best">Best</span>
-            <span class="value" id="best">0</span>
-          </div>
-          <div class="panel">
-            <span class="label" data-i18n="hud.ball">Ball</span>
-            <span class="value" id="ball">1</span>
-          </div>
-          <div class="panel">
-            <span class="label" data-i18n="hud.siege">Siege</span>
-            <span class="value" id="siege">1</span>
-          </div>
-        </div>
 
         <div class="overlay" id="overlay">
           <p class="headline" id="overlay-title" data-i18n="overlay.ready">Pull the plunger</p>
@@ -47,6 +29,25 @@
         </div>
 
         <div class="plunger" aria-hidden="true"><span id="plunger-fill"></span></div>
+      </div>
+
+      <div class="hud" aria-live="polite">
+        <div class="panel">
+          <span class="label" data-i18n="hud.score">Score</span>
+          <span class="value" id="score">0</span>
+      </div>
+        <div class="panel">
+          <span class="label" data-i18n="hud.best">Best</span>
+          <span class="value" id="best">0</span>
+      </div>
+        <div class="panel">
+          <span class="label" data-i18n="hud.ball">Ball</span>
+          <span class="value" id="ball">1</span>
+      </div>
+        <div class="panel">
+          <span class="label" data-i18n="hud.siege">Siege</span>
+          <span class="value" id="siege">1</span>
+      </div>
       </div>
 
       <div class="touch" aria-hidden="true">

@@ -53,8 +53,17 @@ export const PLAY_LEFT = 18;
 /** The art is symmetric about the centre of the image, so mirror through this. */
 export const CENTRE_X = 512;
 
-/** Past this the ball is gone. Level with the bottom of the painted apron well. */
-export const DRAIN_Y = 1450;
+/**
+ * Past this the ball is gone, and it is below the bottom edge of the board.
+ *
+ * It used to be 1450 on a 1536 tall table, which put it a hundred units under
+ * the flippers and well inside the picture. The ball simply blinked out of
+ * existence in the middle of the apron and a new one appeared, which reads as
+ * the game glitching rather than as losing a ball. At 1580 the ball is fully
+ * past the bottom edge, radius included, before anything counts it as lost, so
+ * you watch it go.
+ */
+export const DRAIN_Y = 1580;
 
 export const FLIPPER_PIVOT_LEFT: Vec = vec(330, 1258);
 export const FLIPPER_PIVOT_RIGHT: Vec = vec(694, 1258);
@@ -71,7 +80,7 @@ const TOP_WALL_Y = 12;
 /* The castle, traced off the stonework. */
 const CASTLE_LEFT = 232;
 const CASTLE_RIGHT = 800;
-const CASTLE_TOP = 88;
+const CASTLE_TOP = 112;
 const CASTLE_BOTTOM = 495;
 
 /**
@@ -215,13 +224,25 @@ function castle(): Collider[] {
     // a trap: a slow ball settles on it and stays. Sloping means a ball that
     // runs out of speed up here rolls off the right hand end into the orbit
     // instead of parking on the battlements.
-    segment(vec(CASTLE_LEFT, CASTLE_TOP), vec(CASTLE_RIGHT, CASTLE_TOP + ROOF_FALL)),
     segment(vec(CASTLE_LEFT, CASTLE_TOP), vec(CASTLE_LEFT, CASTLE_BOTTOM)),
     segment(vec(CASTLE_RIGHT, CASTLE_TOP + ROOF_FALL), vec(CASTLE_RIGHT, CASTLE_BOTTOM)),
     segment(vec(CASTLE_LEFT, CASTLE_BOTTOM), vec(gateLeft, CASTLE_BOTTOM)),
     segment(vec(gateRight, CASTLE_BOTTOM), vec(CASTLE_RIGHT, CASTLE_BOTTOM)),
   ];
-  return solid('castle', segs, WOOD);
+  return [
+    ...solid('castle', segs, WOOD),
+    // The roof is metal, not wood, and that is a playability fix rather than a
+    // material choice. The corridor over it is the only route between the two
+    // orbits, and a ball crossing it bounces between roof and ceiling the whole
+    // way. On wood, at friction 0.14, it arrives at the far side with almost
+    // nothing left and dribbles down instead of completing the orbit. On screen
+    // that reads as the ball going into slow motion in the top of the table.
+    ...solid(
+      'castle-roof',
+      [segment(vec(CASTLE_LEFT, CASTLE_TOP), vec(CASTLE_RIGHT, CASTLE_TOP + ROOF_FALL))],
+      METAL,
+    ),
+  ];
 }
 
 /** Inside the castle: a back wall to stop the ball, and a sensor that scores it. */
@@ -298,22 +319,24 @@ function bumpers(): Collider[] {
  * something drawn as solid, which is the part that would look broken.
  */
 /**
- * Deflectors at the bottom of each orbit, which turn the ball back inwards.
+ * The lower walls, converging towards the flippers.
  *
- * These replaced the painted ramp structures, which sat in the middle of each
- * orbit and narrowed it. The right one in particular left 67 units of a 105
- * unit channel, so a ball coming down that side rattled through a slot and then
- * dropped straight into the outlane, and the player never got a shot at it.
+ * Below the slingshots the table used to be open for its whole 887 unit width,
+ * so a ball had far more ways to be lost than to be saved and a game lasted a
+ * few seconds. These bring each side in to about 60 units of outlane beside the
+ * flipper, which is a gap a ball fits through but only when it is genuinely
+ * beaten, rather than a pair of open doors.
  *
- * A single angled run each, sloping inwards and downwards, so a ball arriving
- * down the orbit is turned towards the middle of the table and arrives at the
- * flippers instead of beside them. Nothing sits directly under the lower end,
- * so there is no corner for the ball to settle into.
+ * They replace the orbit deflectors, which did the same steering job less well
+ * and met the old outer wall at an angle that made a corner.
  */
-function orbitDeflectors(): Collider[] {
-  const left = segment(vec(PLAY_LEFT, 900), vec(150, 1020), 8);
-  const right = segment(vec(LANE_X, 900), vec(mx(150), 1020), 8);
-  return solid('deflector', [left, right], PLASTIC);
+function lowerWalls(): Collider[] {
+  // Both start BELOW the slingshots, not beside them. Starting at y=1000 put
+  // the right hand wall 28 units from the right slingshot, and 28 is a gap a
+  // 54 unit ball can reach into and not fit through.
+  const left = segment(vec(PLAY_LEFT, 1150), vec(270, 1300), 8);
+  const right = segment(vec(LANE_X, 1150), vec(mx(270), 1300), 8);
+  return solid('lower', [left, right], PLASTIC);
 }
 
 /**
@@ -397,6 +420,28 @@ function dropTargets(): Collider[] {
 }
 
 /**
+ * The two painted ramp entrances, as their inner edges only.
+ *
+ * The art puts a raised red ramp with a gold arrow on each side, and until now
+ * nothing was there at all: the ball fell straight through them, which looks
+ * broken because the picture plainly shows something solid.
+ *
+ * Only the inner edge is modelled, and that is forced. The painted right ramp
+ * runs from 760 to 860 across an orbit that is 800 to 905, so making the whole
+ * shape solid leaves 45 units for a 54 unit ball and seals the right orbit
+ * completely. Modelling the inner edge gives the ball something to hit from the
+ * middle of the table, where it is visible and useful, while the orbit still
+ * runs behind it.
+ *
+ * They start below the castle so there is no corner where the two meet.
+ */
+function ramps(): Collider[] {
+  const left = segment(vec(250, 560), vec(268, 720), 10);
+  const right = segment(vec(mx(250), 560), vec(mx(268), 720), 10);
+  return solid('ramp', [left, right], PLASTIC, 260);
+}
+
+/**
  * Small posts through the middle of the table, on the painted lamp lenses.
  *
  * Chasing wedges took out the lane guides and the ramp structures, and between
@@ -416,7 +461,7 @@ function posts(): Collider[] {
     [300, 800], [724, 800],
     [512, 890],
     [400, 980], [624, 980],
-    [232, 1010], [792, 1010],
+    [286, 1030], [738, 1030],
   ];
   return at.map(([x, y]) => post('post', vec(x, y), 16, RUBBER, 190));
 }
@@ -472,8 +517,9 @@ export function buildTable(): Table {
     ...castleChamber(),
     gate,
     ...bumpers(),
-    ...orbitDeflectors(),
+    ...lowerWalls(),
     ...slingshots(),
+    ...ramps(),
     ...posts(),
     ...targets,
     ...laneSensors(),
