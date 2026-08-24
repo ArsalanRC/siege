@@ -81,7 +81,15 @@ const trail = [];
  * here, it is simply the state the project is in before the art lands, and the
  * table stays playable either way.
  */
-const art = { playfield: null, ball: null, flipperLeft: null, flipperRight: null };
+/*
+ * One flipper image, not two.
+ *
+ * The right bat is the left one mirrored, and the renderer already flips the
+ * canvas to draw it. Generating a second image would only introduce a chance
+ * that the two sides disagree, and they sit side by side where any difference
+ * is immediately obvious.
+ */
+const art = { playfield: null, ball: null, flipper: null };
 
 function loadArt(name, file) {
   const img = new Image();
@@ -97,8 +105,7 @@ function loadArt(name, file) {
 // are drawn on top of it and their alpha is the entire point, so they stay PNG.
 loadArt('playfield', 'playfield.jpg');
 loadArt('ball', 'ball.png');
-loadArt('flipperLeft', 'flipper-left.png');
-loadArt('flipperRight', 'flipper-right.png');
+loadArt('flipper', 'flipper.png');
 
 /* ---------- drawing ---------- */
 
@@ -463,8 +470,8 @@ function render(now) {
     drawStateOverArt();
   }
   drawLights(now);
-  drawFlipper(game.left, art.flipperLeft);
-  drawFlipper(game.right, art.flipperRight);
+  drawFlipper(game.left, art.flipper);
+  drawFlipper(game.right, art.flipper);
   drawBall();
 
   if (showGeometry) drawGeometry();
