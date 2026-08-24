@@ -60,7 +60,7 @@ property quietly stops holding.
 
 ```sh
 pnpm install
-pnpm test        # 74 tests, all headless
+pnpm test        # 76 tests, all headless
 pnpm typecheck
 pnpm build:site  # emits the engine into site/lib
 ```
