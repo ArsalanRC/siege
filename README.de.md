@@ -12,7 +12,7 @@ Physik-Bibliothek, kein Bundler, keine Abhängigkeiten. Läuft im Browser.
 Drei Kugeln, eine Burg. Alle drei Ziele umlegen, dann hebt sich das Fallgitter.
 Wer durch das offene Tor trifft, nimmt den Bergfried ein. Die Ziele stellen
 sich wieder auf, der Sturm steigt eine Stufe, und alles auf dem Tisch zählt
-mehr als vorher. Geht eine Kugel verloren, faengt der Sturm wieder bei eins an.
+mehr als vorher. Geht eine Kugel verloren, fängt der Sturm wieder bei eins an.
 
 Der Tisch misst 1024 mal 1536 Einheiten. Eine Einheit entspricht einem Pixel
 der Spielfläche. Im Code wird nie zwischen zwei Koordinatensystemen umgerechnet.
@@ -65,7 +65,7 @@ Sicherheitsgarantie still und leise.
 
 ```sh
 pnpm install
-pnpm test        # 74 Tests, alle ohne Browser
+pnpm test        # 76 Tests, alle ohne Browser
 pnpm typecheck
 pnpm build:site  # legt die Engine nach site/lib
 ```
