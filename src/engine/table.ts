@@ -65,11 +65,25 @@ export const PLUNGER_REST: Vec = vec(962, 1380);
 /** Corner radius on the two top corners of the outer wall. */
 const CORNER_R = 190;
 
+/** The ceiling. The castle runs up to meet it, so nothing sits above the castle. */
+const TOP_WALL_Y = 12;
+
 /* The castle, traced off the stonework. */
 const CASTLE_LEFT = 232;
 const CASTLE_RIGHT = 800;
-const CASTLE_TOP = 95;
+const CASTLE_TOP = 88;
 const CASTLE_BOTTOM = 495;
+
+/**
+ * How far the roof drops from left to right, over 568 units of run.
+ *
+ * Sixty, which is about six degrees. Eighteen was tried first and the ball
+ * simply stopped up there: one and a half degrees does not beat the friction of
+ * the wood, so it crept along at 5 units a second and never came off. A roof
+ * under a ceiling has to shed a slow ball on its own or it is a trap with extra
+ * steps.
+ */
+const ROOF_FALL = 60;
 
 /**
  * The apex of the painted gable, and it is not decoration.
@@ -153,7 +167,7 @@ function outerWalls(): Collider[] {
   const segs: Segment[] = [
     segment(vec(PLAY_LEFT, DRAIN_Y), vec(PLAY_LEFT, CORNER_R)),
     ...arcToSegments(vec(PLAY_LEFT + CORNER_R, CORNER_R), CORNER_R, Math.PI, Math.PI * 1.5, 16),
-    segment(vec(PLAY_LEFT + CORNER_R, 12), vec(right - CORNER_R, 12)),
+    segment(vec(PLAY_LEFT + CORNER_R, TOP_WALL_Y), vec(right - CORNER_R, TOP_WALL_Y)),
     ...arcToSegments(vec(right - CORNER_R, CORNER_R), CORNER_R, Math.PI * 1.5, Math.PI * 2, 16),
     segment(vec(right, CORNER_R), vec(right, DRAIN_Y)),
   ];
@@ -183,11 +197,27 @@ function castle(): Collider[] {
   const gateLeft = GATE_CENTRE - GATE_HALF_WIDTH;
   const gateRight = GATE_CENTRE + GATE_HALF_WIDTH;
   const segs: Segment[] = [
+    // The roof, and the corridor above it, are the whole orbit.
+    //
+    // Two failures got this here. First the roof peaked at y=45 under a ceiling
+    // at y=12, leaving 33 units for a 54 unit ball: the ball could not cross the
+    // table, so a launched ball rattled along the top right and came back down
+    // the side it went up, and the left half was never played at all. Then the
+    // castle was run up to the ceiling to close that pocket, which was worse:
+    // the two orbits only met below the castle, so the ball fell straight back
+    // into the shooter lane and drained in a second and a half.
+    //
+    // So the roof sits low enough to leave a proper corridor. Clearance runs
+    // from 66 units at the left to 84 at the right, always more than a ball, and
+    // this is the only path between the two orbits.
+    //
+    // It slopes rather than being level, because a level roof under a ceiling is
+    // a trap: a slow ball settles on it and stays. Sloping means a ball that
+    // runs out of speed up here rolls off the right hand end into the orbit
+    // instead of parking on the battlements.
+    segment(vec(CASTLE_LEFT, CASTLE_TOP), vec(CASTLE_RIGHT, CASTLE_TOP + ROOF_FALL)),
     segment(vec(CASTLE_LEFT, CASTLE_TOP), vec(CASTLE_LEFT, CASTLE_BOTTOM)),
-    segment(vec(CASTLE_RIGHT, CASTLE_TOP), vec(CASTLE_RIGHT, CASTLE_BOTTOM)),
-    // Two slopes rather than one level run. See CASTLE_ROOF.
-    segment(vec(CASTLE_LEFT, CASTLE_TOP), vec(CENTRE_X, CASTLE_ROOF)),
-    segment(vec(CENTRE_X, CASTLE_ROOF), vec(CASTLE_RIGHT, CASTLE_TOP)),
+    segment(vec(CASTLE_RIGHT, CASTLE_TOP + ROOF_FALL), vec(CASTLE_RIGHT, CASTLE_BOTTOM)),
     segment(vec(CASTLE_LEFT, CASTLE_BOTTOM), vec(gateLeft, CASTLE_BOTTOM)),
     segment(vec(gateRight, CASTLE_BOTTOM), vec(CASTLE_RIGHT, CASTLE_BOTTOM)),
   ];
@@ -242,10 +272,20 @@ function portcullis(): Collider {
  * almost no speed would leave with less, and would sit among them forever.
  */
 function bumpers(): Collider[] {
+  // Radius 42, not the 78 the painted shield caps measure.
+  //
+  // The left orbit is 214 units wide, between the outer wall and the castle. A
+  // ball is 54. At radius 78 every bumper left under 54 on both sides, so the
+  // left half of the table was sealed off and no ball ever went down it. The
+  // caps are still painted at their full size, which is normal: on a real
+  // machine the plastic cap is wider than the skirt the ball actually hits.
+  //
+  // At 42 each of these leaves about 60 units clear on either side, so the ball
+  // weaves past them instead of being stopped by them.
   return [
-    post('bumper', vec(148, 212), 78, RUBBER, BUMPER_KICK),
-    post('bumper', vec(255, 352), 78, RUBBER, BUMPER_KICK),
-    post('bumper', vec(112, 402), 78, RUBBER, BUMPER_KICK),
+    post('bumper', vec(122, 200), 42, RUBBER, BUMPER_KICK),
+    post('bumper', vec(130, 320), 42, RUBBER, BUMPER_KICK),
+    post('bumper', vec(118, 440), 42, RUBBER, BUMPER_KICK),
   ];
 }
 
@@ -257,24 +297,23 @@ function bumpers(): Collider[] {
  * travel, so for now they are solid angled walls: the ball cannot pass through
  * something drawn as solid, which is the part that would look broken.
  */
-function ramps(): Collider[] {
-  const left = polyline([vec(178, 700), vec(196, 560), vec(258, 470)], 10);
-
-  // The right ramp is NOT the mirror of the left, and that is deliberate.
-  //
-  // The art is symmetric about the centre of the image, but the shooter lane
-  // eats into the right hand side, so the painted right orbit is only about 30
-  // units wide. A ball is 54. Mirroring the ramp exactly left a 49 unit gap
-  // between it and the lane rail, and the ball wedged in it and hung there
-  // forever, at (883, 694) every single time.
-  //
-  // So the collision on this side sits inside the painting by about 30 units.
-  // The ball clips a little under the painted ramp edge, which nobody will
-  // notice, instead of jamming in a slot it cannot fit through, which everybody
-  // would.
-  const right = polyline([vec(815, 700), vec(828, 560), vec(766, 470)], 10);
-
-  return solid('ramp', [...left, ...right], PLASTIC);
+/**
+ * Deflectors at the bottom of each orbit, which turn the ball back inwards.
+ *
+ * These replaced the painted ramp structures, which sat in the middle of each
+ * orbit and narrowed it. The right one in particular left 67 units of a 105
+ * unit channel, so a ball coming down that side rattled through a slot and then
+ * dropped straight into the outlane, and the player never got a shot at it.
+ *
+ * A single angled run each, sloping inwards and downwards, so a ball arriving
+ * down the orbit is turned towards the middle of the table and arrives at the
+ * flippers instead of beside them. Nothing sits directly under the lower end,
+ * so there is no corner for the ball to settle into.
+ */
+function orbitDeflectors(): Collider[] {
+  const left = segment(vec(PLAY_LEFT, 900), vec(150, 1020), 8);
+  const right = segment(vec(LANE_X, 900), vec(mx(150), 1020), 8);
+  return solid('deflector', [left, right], PLASTIC);
 }
 
 /**
@@ -357,6 +396,31 @@ function dropTargets(): Collider[] {
   }));
 }
 
+/**
+ * Small posts through the middle of the table, on the painted lamp lenses.
+ *
+ * Chasing wedges took out the lane guides and the ramp structures, and between
+ * the targets at 545 and the slingshots at 1075 that left five hundred units of
+ * bare wood with nothing in it. The table was playable and dull: a ball lasted
+ * thirty seconds and scored two hundred, because it spent its life falling
+ * through empty space.
+ *
+ * These are round, isolated and far apart, which is the shape that cannot trap.
+ * A wedge needs two surfaces converging on a gap narrower than a ball, and
+ * single posts with a hundred units of clear air around them never make one.
+ * The small kick keeps a tiring ball moving instead of letting it die in the
+ * middle of the table.
+ */
+function posts(): Collider[] {
+  const at: Array<[number, number]> = [
+    [300, 800], [724, 800],
+    [512, 890],
+    [400, 980], [624, 980],
+    [232, 1010], [792, 1010],
+  ];
+  return at.map(([x, y]) => post('post', vec(x, y), 16, RUBBER, 190));
+}
+
 /** Sensors across each inlane and outlane, so the game knows where a ball went. */
 function laneSensors(): Collider[] {
   return [
@@ -408,8 +472,9 @@ export function buildTable(): Table {
     ...castleChamber(),
     gate,
     ...bumpers(),
-    ...ramps(),
+    ...orbitDeflectors(),
     ...slingshots(),
+    ...posts(),
     ...targets,
     ...laneSensors(),
   ];
