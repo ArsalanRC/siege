@@ -2,6 +2,10 @@ import { describe, it, expect } from 'vitest';
 import type { Game, GameEvent, Input } from '../src/engine/game.js';
 import { createGame, stepGame, readout, NO_INPUT, BALLS_PER_GAME, PLUNGER_CHARGE_TIME } from '../src/engine/game.js';
 import { TABLE_W, TABLE_H, DRAIN_Y, LANE_X } from '../src/engine/table.js';
+
+/* The ball is meant to fall clear of the bottom edge before it counts as lost,
+ * so "still on the table" reaches past the picture, not just to it. */
+const BELOW_BOARD = DRAIN_Y + 120;
 import { BALL_RADIUS } from '../src/engine/physics.js';
 import { vec } from '../src/engine/vec.js';
 
@@ -107,7 +111,7 @@ describe('the ball stays on the table', () => {
       expect(g.ball.pos.x).toBeGreaterThan(-BALL_RADIUS);
       expect(g.ball.pos.x).toBeLessThan(TABLE_W + BALL_RADIUS);
       expect(g.ball.pos.y).toBeGreaterThan(-BALL_RADIUS);
-      expect(g.ball.pos.y).toBeLessThan(TABLE_H + BALL_RADIUS);
+      expect(g.ball.pos.y).toBeLessThan(BELOW_BOARD);
     }
   });
 
@@ -126,7 +130,7 @@ describe('the ball stays on the table', () => {
       expect(g.ball.pos.x).toBeGreaterThan(-BALL_RADIUS);
       expect(g.ball.pos.x).toBeLessThan(TABLE_W + BALL_RADIUS);
       expect(g.ball.pos.y).toBeGreaterThan(-BALL_RADIUS);
-      expect(g.ball.pos.y).toBeLessThan(TABLE_H + BALL_RADIUS);
+      expect(g.ball.pos.y).toBeLessThan(BELOW_BOARD);
     }
   });
 
