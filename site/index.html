@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title data-i18n="meta.title">SIEGE</title>
+    <meta name="description" data-i18n-attr="content" data-i18n="meta.description" content="" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <span class="wordmark">SIEGE</span>
+      <nav>
+        <button id="lang" type="button" class="ghost" aria-label="Sprache wechseln">DE</button>
+        <button id="debug" type="button" class="ghost" data-i18n="nav.debug">Geometry</button>
+      </nav>
+    </header>
+
+    <main>
+      <div class="stage">
+        <canvas id="table" width="1024" height="1536"></canvas>
+
+        <div class="hud" aria-live="polite">
+          <div class="panel">
+            <span class="label" data-i18n="hud.score">Score</span>
+            <span class="value" id="score">0</span>
+          </div>
+          <div class="panel">
+            <span class="label" data-i18n="hud.best">Best</span>
+            <span class="value" id="best">0</span>
+          </div>
+          <div class="panel">
+            <span class="label" data-i18n="hud.ball">Ball</span>
+            <span class="value" id="ball">1</span>
+          </div>
+          <div class="panel">
+            <span class="label" data-i18n="hud.siege">Siege</span>
+            <span class="value" id="siege">1</span>
+          </div>
+        </div>
+
+        <div class="overlay" id="overlay">
+          <p class="headline" id="overlay-title" data-i18n="overlay.ready">Pull the plunger</p>
+          <p class="sub" id="overlay-sub" data-i18n="overlay.hint">
+            Hold Space to wind it up. Left and right arrows work the flippers.
+          </p>
+        </div>
+
+        <div class="plunger" aria-hidden="true"><span id="plunger-fill"></span></div>
+      </div>
+
+      <div class="touch" aria-hidden="true">
+        <button id="touch-left" type="button" class="pad">◀</button>
+        <button id="touch-plunger" type="button" class="pad narrow">▲</button>
+        <button id="touch-right" type="button" class="pad">▶</button>
+      </div>
+    </main>
+
+    <footer class="bar">
+      <span data-i18n="foot.built">Hand-written physics. No engine, no bundler, no dependencies.</span>
+      <a href="https://github.com/ArsalanRC/siege" rel="noreferrer">Source</a>
+    </footer>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
