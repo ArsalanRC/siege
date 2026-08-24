@@ -1,0 +1,20 @@
+/*
+ * The page runs the real engine, not a copy of it.
+ *
+ * `src` writes `.js` extensions on its own imports, which TypeScript leaves
+ * alone, so the emitted files are ES modules a browser loads with no bundler
+ * and no tooling beyond `tsc`. A bug fixed in the physics is fixed in the game,
+ * because there is no second implementation to drift.
+ *
+ * Output goes to `site/lib`, which is generated and not committed.
+ */
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "site/lib",
+    "declaration": false,
+    "sourceMap": true
+  },
+  "include": ["src"]
+}

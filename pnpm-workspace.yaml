@@ -1,0 +1,11 @@
+# Dependency postinstall scripts are arbitrary code execution, so pnpm blocks
+# them by default and each one must be named. esbuild (pulled in by vitest)
+# genuinely needs its postinstall to fetch the right platform binary.
+#
+# The key is `allowBuilds` in pnpm 11, and it takes a MAP, not a list. Written
+# as `- esbuild` it parses without complaint and does nothing, and the install
+# still fails with ERR_PNPM_IGNORED_BUILDS pointing somewhere else entirely.
+# Older guides say `onlyBuiltDependencies` in package.json, which pnpm 11
+# silently ignores.
+allowBuilds:
+  esbuild: true

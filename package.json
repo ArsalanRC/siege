@@ -1,0 +1,28 @@
+{
+  "name": "@arsalanrc/siege",
+  "version": "0.1.0",
+  "description": "A pinball table with hand-written physics. No engine, no bundler, no dependencies. Runs in a browser.",
+  "keywords": [
+    "pinball",
+    "physics",
+    "canvas",
+    "game",
+    "typescript",
+    "zero-dependencies"
+  ],
+  "type": "module",
+  "license": "MIT",
+  "author": "Arsalan Khadim",
+  "packageManager": "pnpm@11.1.2",
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "build:site": "tsc -p tsconfig.site.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
