@@ -240,7 +240,17 @@ function applyHits(g: Game, hits: readonly Hit[], events: GameEvent[]): void {
  * player can see and hear.
  */
 function updateGates(g: Game): void {
-  g.table.laneGate.active = g.ball.pos.x < LANE_X;
+  // A real one-way gate: open ONLY while the ball is inside the lane and still
+  // travelling upward. Every other moment it is solid.
+  //
+  // Keying it on position alone was not enough. A ball fired up a straight lane
+  // comes straight back down the same lane, never crosses onto the playfield,
+  // and drains in a second and a half having been unplayable. Now the gate is
+  // solid on the way back down, and since it is angled the ball is turned out
+  // onto the table instead, which is what the curved exit does on a real
+  // machine.
+  const climbingTheLane = g.ball.pos.x > LANE_X && g.ball.vel.y < 0;
+  g.table.laneGate.active = !climbingTheLane;
   g.table.portcullis.active = !g.gateOpen;
 }
 

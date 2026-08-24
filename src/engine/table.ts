@@ -193,7 +193,11 @@ function outerWalls(): Collider[] {
  */
 function shooterLane(): Collider[] {
   const laneTop = 300;
-  return solid('lane', [segment(vec(LANE_X, DRAIN_Y), vec(LANE_X, laneTop))], METAL);
+  return solid(
+    'lane',
+    [segment(vec(LANE_X, DRAIN_Y), vec(LANE_X, laneTop))],
+    METAL,
+  );
 }
 
 /**
@@ -206,43 +210,19 @@ function castle(): Collider[] {
   const gateLeft = GATE_CENTRE - GATE_HALF_WIDTH;
   const gateRight = GATE_CENTRE + GATE_HALF_WIDTH;
   const segs: Segment[] = [
-    // The roof, and the corridor above it, are the whole orbit.
+    // Solid from the ceiling down. There is no way over the castle, and that
+    // is the art's decision rather than mine: nothing is painted up there, so a
+    // ball crossing it floats through the towers in mid-air with no visible
+    // surface under it. A corridor was tried and it looked exactly that broken.
     //
-    // Two failures got this here. First the roof peaked at y=45 under a ceiling
-    // at y=12, leaving 33 units for a 54 unit ball: the ball could not cross the
-    // table, so a launched ball rattled along the top right and came back down
-    // the side it went up, and the left half was never played at all. Then the
-    // castle was run up to the ceiling to close that pocket, which was worse:
-    // the two orbits only met below the castle, so the ball fell straight back
-    // into the shooter lane and drained in a second and a half.
-    //
-    // So the roof sits low enough to leave a proper corridor. Clearance runs
-    // from 66 units at the left to 84 at the right, always more than a ball, and
-    // this is the only path between the two orbits.
-    //
-    // It slopes rather than being level, because a level roof under a ceiling is
-    // a trap: a slow ball settles on it and stays. Sloping means a ball that
-    // runs out of speed up here rolls off the right hand end into the orbit
-    // instead of parking on the battlements.
-    segment(vec(CASTLE_LEFT, CASTLE_TOP), vec(CASTLE_LEFT, CASTLE_BOTTOM)),
-    segment(vec(CASTLE_RIGHT, CASTLE_TOP + ROOF_FALL), vec(CASTLE_RIGHT, CASTLE_BOTTOM)),
+    // Every ball therefore comes back down the side it went up, and the left
+    // orbit is reached the way a real table reaches it, with a flipper shot.
+    segment(vec(CASTLE_LEFT, TOP_WALL_Y), vec(CASTLE_LEFT, CASTLE_BOTTOM)),
+    segment(vec(CASTLE_RIGHT, TOP_WALL_Y), vec(CASTLE_RIGHT, CASTLE_BOTTOM)),
     segment(vec(CASTLE_LEFT, CASTLE_BOTTOM), vec(gateLeft, CASTLE_BOTTOM)),
     segment(vec(gateRight, CASTLE_BOTTOM), vec(CASTLE_RIGHT, CASTLE_BOTTOM)),
   ];
-  return [
-    ...solid('castle', segs, WOOD),
-    // The roof is metal, not wood, and that is a playability fix rather than a
-    // material choice. The corridor over it is the only route between the two
-    // orbits, and a ball crossing it bounces between roof and ceiling the whole
-    // way. On wood, at friction 0.14, it arrives at the far side with almost
-    // nothing left and dribbles down instead of completing the orbit. On screen
-    // that reads as the ball going into slow motion in the top of the table.
-    ...solid(
-      'castle-roof',
-      [segment(vec(CASTLE_LEFT, CASTLE_TOP), vec(CASTLE_RIGHT, CASTLE_TOP + ROOF_FALL))],
-      METAL,
-    ),
-  ];
+  return solid('castle', segs, WOOD);
 }
 
 /** Inside the castle: a back wall to stop the ball, and a sensor that scores it. */
@@ -499,7 +479,14 @@ export function buildTable(): Table {
   const laneGate: Collider = {
     id: 'lane-gate',
     type: 'segment',
-    seg: segment(vec(LANE_X, 300), vec(LANE_X + 58, 268), 6),
+    // Reaches the right wall, and slopes down towards the playfield.
+    //
+    // It used to stop 58 units short, which left a 41 unit notch against the
+    // wall that a 54 unit ball could not pass but could rest in, so the ball
+    // parked at (983, 242) every strong launch. Meeting the wall removes the
+    // notch, and the downhill run means a ball that settles on the gate rolls
+    // off its low end and onto the table rather than staying there.
+    seg: segment(vec(TABLE_W - 14, 262), vec(LANE_X, 300), 6),
     material: METAL,
     kick: 0,
     sensor: false,
