@@ -244,11 +244,24 @@ describe('the siege', () => {
     expect(events.filter((e) => e.kind === 'target')).toHaveLength(1);
   });
 
-  /** Fire the ball up into the castle mouth from below it. */
+  /**
+   * Fire the ball up into the castle mouth from below it.
+   *
+   * The aim point is read off the portcullis rather than written down here.
+   * The table gets re-traced whenever the art changes, and a test carrying its
+   * own copy of the coordinates fails for a reason that has nothing to do with
+   * what it is testing.
+   */
+  function gateMouth(g: Game): { x: number; y: number } {
+    const seg = g.table.portcullis.seg!;
+    return { x: (seg.a.x + seg.b.x) / 2, y: seg.a.y };
+  }
+
   function shootTheGate(g: Game): GameEvent[] {
+    const mouth = gateMouth(g);
     g.phase = 'playing';
-    g.ball = { pos: vec(470, 430), vel: vec(0, -900), radius: BALL_RADIUS };
-    return run(g, 0.4);
+    g.ball = { pos: vec(mouth.x, mouth.y + 40), vel: vec(0, -900), radius: BALL_RADIUS };
+    return run(g, 0.5);
   }
 
   it('bounces the ball off a shut portcullis instead of taking the keep', () => {
@@ -256,8 +269,9 @@ describe('the siege', () => {
     // It bounces off the gate, falls, and is thrown back up by the centre post,
     // so a snapshot of its velocity says different things at different times.
     const g = createGame();
+    const mouth = gateMouth(g);
     g.phase = 'playing';
-    g.ball = { pos: vec(470, 430), vel: vec(0, -900), radius: BALL_RADIUS };
+    g.ball = { pos: vec(mouth.x, mouth.y + 40), vel: vec(0, -900), radius: BALL_RADIUS };
 
     const events: GameEvent[] = [];
     let highest = g.ball.pos.y;
@@ -267,8 +281,8 @@ describe('the siege', () => {
     }
 
     expect(events.some((e) => e.kind === 'keepTaken')).toBe(false);
-    // The castle mouth is at 400. Never reached it, so never got inside.
-    expect(highest).toBeGreaterThan(400);
+    // Never reached the mouth, so never got inside.
+    expect(highest).toBeGreaterThan(mouth.y);
   });
 
   it('takes the keep through an open gate, then stands the targets back up', () => {
@@ -302,20 +316,41 @@ describe('the siege', () => {
 });
 
 describe('scoring surfaces', () => {
+  /** Drop the ball straight onto the first bumper, wherever the art put it. */
+  function ontoABumper(g: Game): void {
+    const bumper = g.table.colliders.find((c) => c.id.startsWith('bumper'))!;
+    const c = bumper.circle!;
+    g.phase = 'playing';
+    g.ball = {
+      pos: vec(c.c.x, c.c.y - c.radius - BALL_RADIUS - 2),
+      vel: vec(0, 600),
+      radius: BALL_RADIUS,
+    };
+  }
+
   it('scores bumpers and throws the ball back out', () => {
     const g = createGame();
-    g.phase = 'playing';
-    g.ball = { pos: vec(150, 300 - 42 - BALL_RADIUS - 2), vel: vec(0, 600), radius: BALL_RADIUS };
+    ontoABumper(g);
     const events = run(g, 0.2);
     expect(events.some((e) => e.kind === 'bumper')).toBe(true);
     expect(g.score).toBeGreaterThan(0);
   });
 
   it('does not let one bumper score every substep it is touched', () => {
+    // Counting bumper events in total is the wrong measure: the three caps sit
+    // close enough that a ball genuinely rattles between them, and each has its
+    // own cooldown. What must not happen is one cap scoring repeatedly.
     const g = createGame();
-    g.phase = 'playing';
-    g.ball = { pos: vec(150, 300 - 42 - BALL_RADIUS - 2), vel: vec(0, 600), radius: BALL_RADIUS };
+    ontoABumper(g);
     const events = run(g, 0.2);
-    expect(events.filter((e) => e.kind === 'bumper').length).toBeLessThanOrEqual(2);
+
+    const perBumper = new Map<string, number>();
+    for (const e of events) {
+      if (e.kind !== 'score' || e.label !== 'bumper') continue;
+      const key = `${Math.round(e.at.x)},${Math.round(e.at.y)}`;
+      perBumper.set(key, (perBumper.get(key) ?? 0) + 1);
+    }
+    expect(events.some((e) => e.kind === 'bumper')).toBe(true);
+    for (const count of perBumper.values()) expect(count).toBeLessThanOrEqual(1);
   });
 });

@@ -3,30 +3,35 @@
  *
  * Every wall, post, bumper and lane on the playfield, in the same coordinate
  * space as the art. The table is **1024 by 1536 units**, one unit per pixel of
- * the playfield image, so nothing here ever needs converting to draw.
+ * `site/art/playfield.png`, so nothing here ever needs converting to draw.
  *
- * ## These numbers are provisional and that is deliberate
+ * ## These numbers are traced from the art, not invented
  *
- * The layout below was written before the playfield art existed, from the same
- * description the art was generated from. When the image comes back this file
- * gets re-traced against it, because the physics has to match what the player
- * can see. A wall three units left of where it is painted reads as a bug in the
- * physics even though the physics is behaving perfectly.
+ * The first version of this file was written before the playfield existed, from
+ * the same description the art was generated from, and every number in it was
+ * provisional. The art exists now and these are measured off it.
  *
- * So: the constants are named and grouped, and none of them is buried in an
- * expression. Re-tracing should be a matter of changing numbers here and
- * nothing else anywhere.
+ * That direction matters. The player believes what they can see, so a wall three
+ * units from where it is painted reads as a bug in the physics even when the
+ * physics is perfect. The art is the specification and the geometry follows it.
  *
- * ## Why the playfield is 940 wide inside a 1024 wide image
+ * ## Two things the art decided differently
  *
- * The shooter lane runs up the right hand edge and is not part of the play
- * area. That puts the centre line of play at 470 rather than 512, so the
- * flippers, the drain and the castle gate are all centred on 470.
+ * **The painted table is symmetric about x = 512**, the centre of the image,
+ * rather than about the centre of the play area. The shooter lane eats into the
+ * right hand side, so the left wall sits further from the middle than the lane
+ * rail does. Every mirrored pair below is therefore mirrored through
+ * `CENTRE_X`, not through the midpoint of the walls.
+ *
+ * **The castle gate is not on the centre line.** It is painted slightly right
+ * of it, at `GATE_CENTRE`. Nudging the collision to 512 to make the code tidier
+ * would put the mouth off the arch, and the shot would stop lining up with the
+ * thing the player is aiming at.
  *
  * ## Angles
  *
  * y points down the screen. An angle of zero points right, and it increases
- * clockwise as it is drawn. Every arc below is written with that in mind.
+ * clockwise as it is drawn.
  */
 
 import type { Vec } from './vec.js';
@@ -39,46 +44,52 @@ import { WOOD, METAL, RUBBER, PLASTIC } from './physics.js';
 export const TABLE_W = 1024;
 export const TABLE_H = 1536;
 
-/** The shooter lane's inner rail. Everything left of this is play area. */
-export const LANE_X = 940;
+/** The shooter lane's inner rail, traced off the painted metal rail. */
+export const LANE_X = 905;
 
-/** Centre line of play, which is not the centre of the image. */
-export const CENTRE_X = LANE_X / 2;
+/** Outer wall on the left, where the painted blue and gold border sits. */
+export const PLAY_LEFT = 18;
 
-/** Past this the ball is gone. Below the flipper tips, above the image edge. */
-export const DRAIN_Y = 1440;
+/** The art is symmetric about the centre of the image, so mirror through this. */
+export const CENTRE_X = 512;
 
-export const FLIPPER_PIVOT_LEFT: Vec = vec(288, 1330);
-export const FLIPPER_PIVOT_RIGHT: Vec = vec(652, 1330);
+/** Past this the ball is gone. Level with the bottom of the painted apron well. */
+export const DRAIN_Y = 1450;
+
+export const FLIPPER_PIVOT_LEFT: Vec = vec(330, 1258);
+export const FLIPPER_PIVOT_RIGHT: Vec = vec(694, 1258);
 
 /** Where a new ball is parked before the plunger sends it up the lane. */
-export const PLUNGER_REST: Vec = vec((LANE_X + TABLE_W) / 2, 1380);
+export const PLUNGER_REST: Vec = vec(962, 1380);
 
 /** Corner radius on the two top corners of the outer wall. */
-const CORNER_R = 200;
+const CORNER_R = 190;
 
-/** The castle sits across the top, with a gap in its lower face to shoot into. */
-const CASTLE_LEFT = 298;
-const CASTLE_RIGHT = 642;
-const CASTLE_TOP = 110;
-const CASTLE_BOTTOM = 400;
-const GATE_HALF_WIDTH = 55;
+/* The castle, traced off the stonework. */
+const CASTLE_LEFT = 232;
+const CASTLE_RIGHT = 800;
+const CASTLE_TOP = 95;
+const CASTLE_BOTTOM = 495;
 
 /**
- * The apex of the castle roof, and it is not decoration.
+ * The apex of the painted gable, and it is not decoration.
  *
- * The roof was flat in the first version, and a flat horizontal wall is a
- * permanent ball trap on a table seen from above. Gravity pulls down the
- * screen, so a ball that lands on a level ledge settles there and stays,
- * forever, with nothing thrown and nothing logged. It cost ten seconds of
- * simulation to find and it would have looked like the game freezing at random.
+ * A flat horizontal wall is a permanent ball trap on a table seen from above.
+ * Gravity pulls down the screen, so a ball that lands on a level ledge settles
+ * there and stays, forever, with nothing thrown and nothing logged. It cost ten
+ * seconds of simulation to find, and on screen it would have looked like the
+ * game freezing at random.
  *
- * Fifteen degrees of pitch is enough to roll any ball straight back off into
- * the orbit. The rule this stands for: **no horizontal surface the ball can
- * land on top of.** Every other level run on this table is a ceiling, struck
- * from underneath, which is safe.
+ * The rule this stands for: **no horizontal surface the ball can land on top
+ * of.** Every other level run on this table is a ceiling, struck from
+ * underneath, which is safe. The art was prompted with the pitch for the same
+ * reason, so the collision and the painting agree.
  */
-export const CASTLE_ROOF = CASTLE_TOP - 46;
+export const CASTLE_ROOF = 45;
+
+/** The arch is painted right of centre, so the collision follows it there. */
+const GATE_CENTRE = 524;
+const GATE_HALF_WIDTH = 48;
 
 /** How much extra speed each thing throws the ball with, in units per second. */
 const BUMPER_KICK = 1450;
@@ -88,6 +99,11 @@ let nextId = 0;
 function id(prefix: string): string {
   nextId += 1;
   return `${prefix}-${nextId}`;
+}
+
+/** Mirror an x coordinate through the painted centre line. */
+function mx(x: number): number {
+  return CENTRE_X * 2 - x;
 }
 
 function solid(prefix: string, segs: Segment[], material: Material, kick = 0): Collider[] {
@@ -130,16 +146,16 @@ function sensor(name: string, segs: Segment[]): Collider[] {
  * The outer wall: two straight sides, two rounded top corners, a flat top.
  *
  * It stops short of the bottom on both sides, because the bottom of a pinball
- * table is not a wall. It is the drain, and leaving it open is what makes the
- * game a game.
+ * table is not a wall. It is the drain, and leaving it open is the game.
  */
 function outerWalls(): Collider[] {
+  const right = TABLE_W - 14;
   const segs: Segment[] = [
-    segment(vec(0, DRAIN_Y), vec(0, CORNER_R)),
-    ...arcToSegments(vec(CORNER_R, CORNER_R), CORNER_R, Math.PI, Math.PI * 1.5, 16),
-    segment(vec(CORNER_R, 0), vec(TABLE_W - CORNER_R, 0)),
-    ...arcToSegments(vec(TABLE_W - CORNER_R, CORNER_R), CORNER_R, Math.PI * 1.5, Math.PI * 2, 16),
-    segment(vec(TABLE_W, CORNER_R), vec(TABLE_W, DRAIN_Y)),
+    segment(vec(PLAY_LEFT, DRAIN_Y), vec(PLAY_LEFT, CORNER_R)),
+    ...arcToSegments(vec(PLAY_LEFT + CORNER_R, CORNER_R), CORNER_R, Math.PI, Math.PI * 1.5, 16),
+    segment(vec(PLAY_LEFT + CORNER_R, 12), vec(right - CORNER_R, 12)),
+    ...arcToSegments(vec(right - CORNER_R, CORNER_R), CORNER_R, Math.PI * 1.5, Math.PI * 2, 16),
+    segment(vec(right, CORNER_R), vec(right, DRAIN_Y)),
   ];
   return solid('wall', segs, WOOD);
 }
@@ -148,9 +164,9 @@ function outerWalls(): Collider[] {
  * The shooter lane, up the right hand edge.
  *
  * The rail stops at `laneTop` so the ball is thrown out into the horseshoe at
- * the top of the table. The one-way gate that stops it coming back down the
- * lane is not here: it is switched on and off per frame by the game, since
- * whether it is solid depends on which way the ball is going.
+ * the top. The one-way gate that stops it dribbling back down is not here: it
+ * is switched on and off per frame by the game, since whether it is solid
+ * depends on which way the ball is going.
  */
 function shooterLane(): Collider[] {
   const laneTop = 300;
@@ -158,14 +174,14 @@ function shooterLane(): Collider[] {
 }
 
 /**
- * The castle. Three solid faces and a lower face with a gap shot through it.
+ * The castle. Pitched roof, two solid sides, and a lower face with a gap.
  *
  * The gap is the whole point of the structure. Everything else about the castle
- * exists to make hitting that gap difficult and worth doing.
+ * exists to make hitting it difficult and worth doing.
  */
 function castle(): Collider[] {
-  const gateLeft = CENTRE_X - GATE_HALF_WIDTH;
-  const gateRight = CENTRE_X + GATE_HALF_WIDTH;
+  const gateLeft = GATE_CENTRE - GATE_HALF_WIDTH;
+  const gateRight = GATE_CENTRE + GATE_HALF_WIDTH;
   const segs: Segment[] = [
     segment(vec(CASTLE_LEFT, CASTLE_TOP), vec(CASTLE_LEFT, CASTLE_BOTTOM)),
     segment(vec(CASTLE_RIGHT, CASTLE_TOP), vec(CASTLE_RIGHT, CASTLE_BOTTOM)),
@@ -180,29 +196,37 @@ function castle(): Collider[] {
 
 /** Inside the castle: a back wall to stop the ball, and a sensor that scores it. */
 function castleChamber(): Collider[] {
-  const gateLeft = CENTRE_X - GATE_HALF_WIDTH;
-  const gateRight = CENTRE_X + GATE_HALF_WIDTH;
+  const gateLeft = GATE_CENTRE - GATE_HALF_WIDTH;
+  const gateRight = GATE_CENTRE + GATE_HALF_WIDTH;
   return [
-    ...solid('castle-back', [segment(vec(gateLeft, CASTLE_TOP + 40), vec(gateRight, CASTLE_TOP + 40))], WOOD),
-    ...sensor('gate', [segment(vec(gateLeft, CASTLE_BOTTOM - 20), vec(gateRight, CASTLE_BOTTOM - 20))]),
+    ...solid(
+      'castle-back',
+      [segment(vec(gateLeft, CASTLE_BOTTOM - 210), vec(gateRight, CASTLE_BOTTOM - 210))],
+      WOOD,
+    ),
+    ...sensor('gate', [
+      segment(vec(gateLeft, CASTLE_BOTTOM - 30), vec(gateRight, CASTLE_BOTTOM - 30)),
+    ]),
   ];
 }
 
 /**
  * The portcullis across the castle mouth.
  *
- * Solid while the siege is not ready, so a ball shot at a shut gate bounces off
- * it. The first version left the mouth permanently open and only withheld the
- * score, which is defensible but reads as the table ignoring a good shot. A
+ * Solid until all three targets are down, so a ball shot at a shut gate bounces
+ * off it. The first version left the mouth permanently open and only withheld
+ * the score, which is defensible but reads as the table ignoring a good shot. A
  * player needs to be told no by something they can see and hear.
  */
 function portcullis(): Collider {
-  const gateLeft = CENTRE_X - GATE_HALF_WIDTH;
-  const gateRight = CENTRE_X + GATE_HALF_WIDTH;
   return {
     id: 'portcullis',
     type: 'segment',
-    seg: segment(vec(gateLeft, CASTLE_BOTTOM), vec(gateRight, CASTLE_BOTTOM), 6),
+    seg: segment(
+      vec(GATE_CENTRE - GATE_HALF_WIDTH, CASTLE_BOTTOM),
+      vec(GATE_CENTRE + GATE_HALF_WIDTH, CASTLE_BOTTOM),
+      6,
+    ),
     material: METAL,
     kick: 0,
     sensor: false,
@@ -211,7 +235,7 @@ function portcullis(): Collider {
 }
 
 /**
- * Three pop bumpers in the upper left, where the orbit spits the ball out.
+ * Three pop bumpers in the upper left, traced onto the painted shield caps.
  *
  * They carry a `kick` rather than a high restitution because restitution can
  * only ever hand back a fraction of what arrived. A ball that dribbles in with
@@ -219,22 +243,51 @@ function portcullis(): Collider {
  */
 function bumpers(): Collider[] {
   return [
-    post('bumper', vec(150, 300), 42, RUBBER, BUMPER_KICK),
-    post('bumper', vec(250, 370), 42, RUBBER, BUMPER_KICK),
-    post('bumper', vec(140, 440), 42, RUBBER, BUMPER_KICK),
+    post('bumper', vec(148, 212), 78, RUBBER, BUMPER_KICK),
+    post('bumper', vec(255, 352), 78, RUBBER, BUMPER_KICK),
+    post('bumper', vec(112, 402), 78, RUBBER, BUMPER_KICK),
   ];
 }
 
 /**
- * Slingshots: the two angled rubbers just above the flippers.
+ * The two ramp structures, as plain deflectors.
  *
- * Only the inward face is modelled. The back of a slingshot is buried in the
- * lane guide and no ball ever reaches it, so giving it geometry would cost
- * collision checks every substep to guard a place the ball cannot be.
+ * They are painted as raised ramps with arrows, and a real one would carry the
+ * ball up and over. That is a second elevation and a whole extra mode of
+ * travel, so for now they are solid angled walls: the ball cannot pass through
+ * something drawn as solid, which is the part that would look broken.
+ */
+function ramps(): Collider[] {
+  const left = polyline([vec(178, 700), vec(196, 560), vec(258, 470)], 10);
+
+  // The right ramp is NOT the mirror of the left, and that is deliberate.
+  //
+  // The art is symmetric about the centre of the image, but the shooter lane
+  // eats into the right hand side, so the painted right orbit is only about 30
+  // units wide. A ball is 54. Mirroring the ramp exactly left a 49 unit gap
+  // between it and the lane rail, and the ball wedged in it and hung there
+  // forever, at (883, 694) every single time.
+  //
+  // So the collision on this side sits inside the painting by about 30 units.
+  // The ball clips a little under the painted ramp edge, which nobody will
+  // notice, instead of jamming in a slot it cannot fit through, which everybody
+  // would.
+  const right = polyline([vec(815, 700), vec(828, 560), vec(766, 470)], 10);
+
+  return solid('ramp', [...left, ...right], PLASTIC);
+}
+
+/**
+ * Slingshots: the two triangular rubbers above the flippers.
+ *
+ * Only the inward face is modelled, traced along the painted red band. The back
+ * of a slingshot is buried in the lane guide and no ball reaches it, so giving
+ * it geometry would cost collision checks every substep to guard a place the
+ * ball cannot be.
  */
 function slingshots(): Collider[] {
-  const left = segment(vec(196, 1078), vec(300, 1202), 8);
-  const right = segment(vec(LANE_X - 196, 1078), vec(LANE_X - 300, 1202), 8);
+  const left = segment(vec(205, 1085), vec(292, 1192), 9);
+  const right = segment(vec(mx(205), 1085), vec(mx(292), 1192), 9);
   return solid('sling', [left, right], RUBBER, SLING_KICK);
 }
 
@@ -247,54 +300,41 @@ function slingshots(): Collider[] {
  * entirely, which reads as the table cheating.
  */
 function laneGuides(): Collider[] {
-  const left = polyline([vec(105, 1080), vec(180, 1240), vec(258, 1332)], 7);
-  const right = polyline(
-    [vec(LANE_X - 105, 1080), vec(LANE_X - 180, 1240), vec(LANE_X - 258, 1332)],
-    7,
-  );
+  const left = polyline([vec(120, 1080), vec(214, 1220), vec(306, 1272)], 8);
+  const right = polyline([vec(mx(120), 1080), vec(mx(214), 1220), vec(mx(306), 1272)], 8);
   return solid('guide', [...left, ...right], PLASTIC);
 }
 
-/** Three drop targets. Knocking all three down is what opens the castle gate. */
+/**
+ * Three drop targets, traced onto the painted ogre shields.
+ *
+ * Knocking all three down is what opens the castle gate.
+ */
 function dropTargets(): Collider[] {
-  const y = 620;
-  const width = 62;
-  const gap = 16;
-  const startX = 176;
-  const out: Collider[] = [];
-  for (let i = 0; i < 3; i++) {
-    const x = startX + i * (width + gap);
-    out.push({
-      id: `target-${i}`,
-      type: 'segment',
-      seg: segment(vec(x, y), vec(x + width, y), 9),
-      material: PLASTIC,
-      kick: 0,
-      sensor: false,
-      active: true,
-    });
-  }
-  return out;
-}
-
-/** Round posts the ball rattles off on its way down. Pure texture, no scoring. */
-function posts(): Collider[] {
-  return [
-    post('post', vec(CENTRE_X, 760), 16, RUBBER, 120),
-    post('post', vec(320, 900), 16, RUBBER, 120),
-    post('post', vec(LANE_X - 320, 900), 16, RUBBER, 120),
-    post('post', vec(430, 1040), 14, RUBBER, 120),
-    post('post', vec(LANE_X - 430, 1040), 14, RUBBER, 120),
+  const y = 545;
+  const spans: Array<[number, number]> = [
+    [330, 425],
+    [455, 550],
+    [580, 675],
   ];
+  return spans.map(([x0, x1], i) => ({
+    id: `target-${i}`,
+    type: 'segment' as const,
+    seg: segment(vec(x0, y), vec(x1, y), 10),
+    material: PLASTIC,
+    kick: 0,
+    sensor: false,
+    active: true,
+  }));
 }
 
 /** Sensors across each inlane and outlane, so the game knows where a ball went. */
 function laneSensors(): Collider[] {
   return [
-    ...sensor('outlane-left', [segment(vec(0, 1330), vec(150, 1330))]),
-    ...sensor('inlane-left', [segment(vec(200, 1330), vec(280, 1330))]),
-    ...sensor('outlane-right', [segment(vec(LANE_X, 1330), vec(LANE_X - 150, 1330))]),
-    ...sensor('inlane-right', [segment(vec(LANE_X - 200, 1330), vec(LANE_X - 280, 1330))]),
+    ...sensor('outlane-left', [segment(vec(PLAY_LEFT, 1300), vec(150, 1300))]),
+    ...sensor('inlane-left', [segment(vec(232, 1300), vec(310, 1300))]),
+    ...sensor('outlane-right', [segment(vec(mx(PLAY_LEFT), 1300), vec(mx(150), 1300))]),
+    ...sensor('inlane-right', [segment(vec(mx(232), 1300), vec(mx(310), 1300))]),
   ];
 }
 
@@ -321,7 +361,7 @@ export function buildTable(): Table {
   const laneGate: Collider = {
     id: 'lane-gate',
     type: 'segment',
-    seg: segment(vec(LANE_X, 300), vec(LANE_X + 60, 268), 6),
+    seg: segment(vec(LANE_X, 300), vec(LANE_X + 58, 268), 6),
     material: METAL,
     kick: 0,
     sensor: false,
@@ -339,10 +379,10 @@ export function buildTable(): Table {
     ...castleChamber(),
     gate,
     ...bumpers(),
+    ...ramps(),
     ...slingshots(),
     ...laneGuides(),
     ...targets,
-    ...posts(),
     ...laneSensors(),
   ];
 

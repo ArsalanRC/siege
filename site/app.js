@@ -91,7 +91,11 @@ function loadArt(name, file) {
   img.src = `art/${file}`;
 }
 
-loadArt('playfield', 'playfield.png');
+// The playfield is a JPEG and the sprites are PNGs, and the split is on
+// purpose. The background covers the whole canvas and needs no transparency,
+// where PNG cost 3.1 MB against 859 KB for the same image as JPEG. The sprites
+// are drawn on top of it and their alpha is the entire point, so they stay PNG.
+loadArt('playfield', 'playfield.jpg');
 loadArt('ball', 'ball.png');
 loadArt('flipperLeft', 'flipper-left.png');
 loadArt('flipperRight', 'flipper-right.png');
@@ -276,6 +280,47 @@ function drawFurniture() {
   }
 }
 
+/**
+ * State the painting cannot show, drawn over it.
+ *
+ * The playfield image is one flat picture of a table at rest, so a target it
+ * paints standing stays standing forever. Without this the player knocks an
+ * ogre down, hears it score, and watches nothing change, which reads as the
+ * table not having registered the hit.
+ *
+ * The painted shields run a little above and below the collider line, so the
+ * panel is drawn from the art rather than from the collider's own bounds.
+ */
+function drawStateOverArt() {
+  const SHIELD_TOP = 518;
+  const SHIELD_BOTTOM = 716;
+
+  for (const target of game.table.targets) {
+    if (target.active || !target.seg) continue;
+    const { a, b } = target.seg;
+    ctx.save();
+    ctx.fillStyle = 'rgb(14 10 8 / 0.72)';
+    ctx.fillRect(a.x - 6, SHIELD_TOP, b.x - a.x + 12, SHIELD_BOTTOM - SHIELD_TOP);
+    // A slot where the target dropped into, so it reads as down rather than as
+    // a black rectangle somebody forgot to draw.
+    ctx.fillStyle = 'rgb(0 0 0 / 0.5)';
+    ctx.fillRect(a.x - 6, SHIELD_BOTTOM - 16, b.x - a.x + 12, 16);
+    ctx.restore();
+  }
+
+  // The portcullis lifting is the single most important thing the table can
+  // tell the player, so it gets drawn rather than left to the glow alone.
+  if (readout(game).gateOpen) {
+    const seg = game.table.portcullis.seg;
+    if (seg) {
+      ctx.save();
+      ctx.fillStyle = 'rgb(20 15 10 / 0.55)';
+      ctx.fillRect(seg.a.x, seg.a.y - 96, seg.b.x - seg.a.x, 96);
+      ctx.restore();
+    }
+  }
+}
+
 /** Everything the geometry cannot say: lit inserts, the open gate, the siege. */
 function drawLights(now) {
   const r = readout(game);
@@ -414,6 +459,8 @@ function render(now) {
   if (!art.playfield) {
     drawCastle();
     drawFurniture();
+  } else {
+    drawStateOverArt();
   }
   drawLights(now);
   drawFlipper(game.left, art.flipperLeft);
