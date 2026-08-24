@@ -130,6 +130,68 @@ describe('the ball stays on the table', () => {
     }
   });
 
+  /** Shortest distance between two line segments, ignoring their radii. */
+  function segDistance(
+    a1: { x: number; y: number }, a2: { x: number; y: number },
+    b1: { x: number; y: number }, b2: { x: number; y: number },
+  ): number {
+    const clampT = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
+    const pointSeg = (p: { x: number; y: number }, s1: { x: number; y: number }, s2: { x: number; y: number }) => {
+      const dx = s2.x - s1.x, dy = s2.y - s1.y;
+      const l2 = dx * dx + dy * dy;
+      const t = l2 === 0 ? 0 : clampT(((p.x - s1.x) * dx + (p.y - s1.y) * dy) / l2);
+      return Math.hypot(p.x - (s1.x + t * dx), p.y - (s1.y + t * dy));
+    };
+    return Math.min(
+      pointSeg(a1, b1, b2), pointSeg(a2, b1, b2),
+      pointSeg(b1, a1, a2), pointSeg(b2, a1, a2),
+    );
+  }
+
+  it('leaves each slingshot a ball-width clear of everything around it', () => {
+    // Three separate traps formed in this corner, all the same shape: a channel
+    // that narrows below the width of a ball, which the ball can enter from the
+    // wide end and then not fit through. Measuring it is the only reliable way
+    // to know, because it looks completely fine in a screenshot.
+    const g = createGame();
+    const slings = g.table.colliders.filter((c) => c.id.startsWith('sling'));
+    expect(slings).toHaveLength(2);
+
+    for (const s of slings) {
+      for (const other of g.table.colliders) {
+        if (other === s || other.sensor || other.type !== 'segment' || !other.seg) continue;
+        const gap = segDistance(s.seg!.a, s.seg!.b, other.seg.a, other.seg.b)
+          - s.seg!.radius - other.seg.radius;
+        // A gap of zero or less is two pieces of geometry meeting, which is
+        // fine: the ball cannot get in there at all. The dangerous band is a
+        // gap wide enough to enter but too narrow to pass.
+        if (gap <= 0) continue;
+        expect(gap, `${s.id} pinches against ${other.id}`).toBeGreaterThan(BALL_RADIUS * 2);
+      }
+    }
+  });
+
+  it('never wedges the ball anywhere, however the flippers are played', () => {
+    // The version of this that only ran with NO_INPUT missed a real wedge,
+    // because a ball that is never flipped never reaches the corners a played
+    // ball reaches. Flipping is the whole point of the machine, so the test
+    // has to flip.
+    for (const seed of [0x51e6e, 0xa11ce, 0x7ab1e, 0xf10ff]) {
+      const g = createGame();
+      launch(g, 0.85);
+      const next = rng(seed);
+      let left = false, right = false, drained = false;
+
+      for (let i = 0; i < 9000 && !drained; i++) {
+        if (i % 10 === 0) { left = next() > 0.45; right = next() > 0.45; }
+        drained = stepGame(g, press({ left, right }), DT).some((e) => e.kind === 'drain');
+      }
+
+      const at = `(${Math.round(g.ball.pos.x)}, ${Math.round(g.ball.pos.y)})`;
+      expect(drained, `seed ${seed.toString(16)}: ball never drained, stuck at ${at}`).toBe(true);
+    }
+  });
+
   it('never lets the ball come to rest somewhere it cannot leave', () => {
     // A flat horizontal wall is a permanent trap on a table seen from above,
     // and the castle roof was one. The ball settled on it and stayed, with

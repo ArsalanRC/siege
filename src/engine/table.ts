@@ -286,8 +286,17 @@ function ramps(): Collider[] {
  * ball cannot be.
  */
 function slingshots(): Collider[] {
-  const left = segment(vec(205, 1085), vec(292, 1192), 9);
-  const right = segment(vec(mx(205), 1085), vec(mx(292), 1192), 9);
+  // The slingshot sits entirely ABOVE the inlane and does not reach down into
+  // it. The first tracing ran the tip to (292, 1192), which left 45.7 units of
+  // clearance to the lane guide for a 54 unit ball. The ball could enter that
+  // pocket and then not fit through it, so it stopped there and the game was
+  // over without ever ending.
+  //
+  // The thinner radius is part of the same fix: the slingshot and the guide
+  // both have to funnel towards the same flipper, so they converge, and every
+  // unit of padding on either one comes straight out of the gap between them.
+  const left = segment(vec(205, 1075), vec(270, 1145), 7);
+  const right = segment(vec(mx(205), 1075), vec(mx(270), 1145), 7);
   return solid('sling', [left, right], RUBBER, SLING_KICK);
 }
 
@@ -299,11 +308,31 @@ function slingshots(): Collider[] {
  * the base of the bat; ending it lower would drop the ball past the flipper
  * entirely, which reads as the table cheating.
  */
-function laneGuides(): Collider[] {
-  const left = polyline([vec(120, 1080), vec(214, 1220), vec(306, 1272)], 8);
-  const right = polyline([vec(mx(120), 1080), vec(mx(214), 1220), vec(mx(306), 1272)], 8);
-  return solid('guide', [...left, ...right], PLASTIC);
-}
+/*
+ * There are no lane guides, and removing them was the fix rather than a
+ * simplification I got away with.
+ *
+ * A guide splits each side into an inlane and an outlane, which is how a real
+ * machine is built. The trouble is that the guide and the slingshot above it
+ * both have to funnel towards the same flipper, so the channel between them
+ * narrows, and anywhere it narrows below 54 units the ball can enter and then
+ * not fit. That produced three separate traps in a row:
+ *
+ * 1. Ball pinched between the slingshot tip and the guide, at (716, 1223).
+ * 2. Moved the guide, and it wedged between the guide and the back of the
+ *    flipper instead, at (731, 1245).
+ * 3. Straightened the guide and ended it above the pivot, and it wedged
+ *    against the guide's own end cap, at (709, 1222).
+ *
+ * Each fix moved the pinch rather than removing it, because the convergence is
+ * inherent to the shape. Without the guides the lower playfield is simply open:
+ * the ball falls to the flippers or it drains down the side, which is what the
+ * outlanes did anyway. The scoring sensors stay, so the game still knows which
+ * side a ball went down.
+ *
+ * If guides ever come back, they need a channel of constant width that is
+ * comfortably wider than a ball for its whole length, not two lines that meet.
+ */
 
 /**
  * Three drop targets, traced onto the painted ogre shields.
@@ -381,7 +410,6 @@ export function buildTable(): Table {
     ...bumpers(),
     ...ramps(),
     ...slingshots(),
-    ...laneGuides(),
     ...targets,
     ...laneSensors(),
   ];
