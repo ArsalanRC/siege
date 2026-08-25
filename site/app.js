@@ -817,35 +817,44 @@ function drawGeometry() {
     }
 
     ctx.setLineDash([]);
-    // The bat gets a wash and a spine rather than the solid body everything else
-    // gets, and that is because it is the one collider you need to see AGAINST
-    // the thing it stands for. Painted solid, with the black casing under it, it
-    // covered its own sprite completely: the only way to compare the two shapes
-    // was to switch the overlay off, which is the opposite of what an overlay is
-    // for.
+    // The bat is OUTLINED, not filled, and it is the only collider that is.
+    //
+    // Filled, it covered its own sprite completely and the only way to compare
+    // the two shapes was to switch the overlay off, which is the opposite of
+    // what an overlay is for. A wash was the next attempt and it read as fog
+    // rather than as geometry. An outline gives the true edge of the collision
+    // AND leaves the bat visible inside it, which is the whole question being
+    // asked here: does the shape the ball hits sit on the shape you can see.
+    //
+    // The bat is straight, so the union of its ten narrowing capsules is exactly
+    // one tapered capsule: two circles and the external tangents between them.
     if (pass === 1) {
       for (const f of [game.left, game.right]) {
-        for (const seg of flipperSegments(f)) {
-          ctx.strokeStyle = 'rgb(255 255 255 / 0.26)';
-          ctx.lineWidth = seg.radius * 2;
+        const segs = flipperSegments(f);
+        const first = segs[0];
+        const last = segs[segs.length - 1];
+        const a = first.a;
+        const b = last.b;
+        const ra = first.radius;
+        const rb = last.radius;
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const len = Math.hypot(dx, dy) || 1;
+        const ux = dx / len;
+        const uy = dy / len;
+        // The tangents lean by this much because the two ends differ in radius.
+        const lean = Math.asin(Math.max(-1, Math.min(1, (ra - rb) / len)));
+        const base = Math.atan2(uy, ux);
+
+        for (const width of [9, 5]) {
+          ctx.strokeStyle = width === 9 ? 'rgb(0 0 0 / 0.85)' : '#ffffff';
+          ctx.lineWidth = width;
           ctx.beginPath();
-          ctx.moveTo(seg.a.x, seg.a.y);
-          ctx.lineTo(seg.b.x, seg.b.y);
+          ctx.arc(a.x, a.y, ra, base + Math.PI / 2 - lean, base - Math.PI / 2 + lean, true);
+          ctx.arc(b.x, b.y, rb, base - Math.PI / 2 + lean, base + Math.PI / 2 - lean, true);
+          ctx.closePath();
           ctx.stroke();
         }
-        const spine = flipperSegment(f);
-        ctx.strokeStyle = 'rgb(0 0 0 / 0.7)';
-        ctx.lineWidth = 6;
-        ctx.beginPath();
-        ctx.moveTo(spine.a.x, spine.a.y);
-        ctx.lineTo(spine.b.x, spine.b.y);
-        ctx.stroke();
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(spine.a.x, spine.a.y);
-        ctx.lineTo(spine.b.x, spine.b.y);
-        ctx.stroke();
       }
     }
   }
