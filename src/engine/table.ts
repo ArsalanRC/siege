@@ -78,9 +78,9 @@ const CORNER_R = 190;
 const TOP_WALL_Y = 12;
 
 /* The castle, traced off the stonework. */
-const CASTLE_LEFT = 232;
-const CASTLE_RIGHT = 800;
-const CASTLE_TOP = 112;
+export const CASTLE_LEFT = 232;
+export const CASTLE_RIGHT = 800;
+export const CASTLE_TOP = 112;
 const CASTLE_BOTTOM = 495;
 
 /**
@@ -92,7 +92,7 @@ const CASTLE_BOTTOM = 495;
  * under a ceiling has to shed a slow ball on its own or it is a trap with extra
  * steps.
  */
-const ROOF_FALL = 60;
+export const ROOF_FALL = 60;
 
 /**
  * The apex of the painted gable, and it is not decoration.
@@ -210,33 +210,35 @@ function castle(): Collider[] {
   const gateLeft = GATE_CENTRE - GATE_HALF_WIDTH;
   const gateRight = GATE_CENTRE + GATE_HALF_WIDTH;
   const segs: Segment[] = [
-    // Solid from the ceiling down. There is no way over the castle, and that
-    // is the art's decision rather than mine: nothing is painted up there, so a
-    // ball crossing it floats through the towers in mid-air with no visible
-    // surface under it. A corridor was tried and it looked exactly that broken.
+    // The corridor over the castle is open, and this time there is a habitrail
+    // drawn on it.
     //
-    // Every ball therefore comes back down the side it went up, and the left
-    // orbit is reached the way a real table reaches it, with a flipper shot.
-    segment(vec(CASTLE_LEFT, TOP_WALL_Y), vec(CASTLE_LEFT, CASTLE_BOTTOM)),
-    segment(vec(CASTLE_RIGHT, 130), vec(CASTLE_RIGHT, CASTLE_BOTTOM)),
-    // The top of the right orbit, closed with a diagonal instead of a corner.
+    // It was open once before and Arsalan rejected it on sight: the ball
+    // travelled over the painted towers with nothing underneath it and looked
+    // like it was flying. Sealing it was the wrong fix, because it left the
+    // left half of the table unreachable. The right fix is the one a real
+    // machine uses: a raised wire rail, drawn, so a ball above the playfield
+    // furniture reads as being on a rail rather than as a bug.
     //
-    // The wall used to run straight up to the ceiling at x=800. The painted
-    // castle only reaches about y=75 at the tower tops, so between there and
-    // the ceiling was a solid wall standing in bare wood with nothing drawn on
-    // it. A launched ball hit it head on, rattled in the corner and fell back
-    // down, which is exactly what an invisible wall feels like.
-    //
-    // The diagonal turns the orbit instead of ending it: a ball arriving at
-    // speed is guided back down the right hand side rather than stopped. It is
-    // still sealed, because there is no room to pass over the castle in this
-    // art: the painted gable peaks at y=45 under a ceiling at y=12, and 33
-    // units will not pass a 54 unit ball.
-    segment(vec(CASTLE_RIGHT, 130), vec(LANE_X, 30), 8),
+    // Clearance is 100 units at the left and 160 at the right against a 54 unit
+    // ball, and the roof is metal so a crossing ball keeps its speed instead of
+    // grinding to a halt between roof and ceiling.
+    segment(vec(CASTLE_LEFT, CASTLE_TOP), vec(CASTLE_LEFT, CASTLE_BOTTOM)),
+    segment(vec(CASTLE_RIGHT, CASTLE_TOP + ROOF_FALL), vec(CASTLE_RIGHT, CASTLE_BOTTOM)),
     segment(vec(CASTLE_LEFT, CASTLE_BOTTOM), vec(gateLeft, CASTLE_BOTTOM)),
     segment(vec(gateRight, CASTLE_BOTTOM), vec(CASTLE_RIGHT, CASTLE_BOTTOM)),
   ];
-  return solid('castle', segs, WOOD);
+  return [
+    ...solid('castle', segs, WOOD),
+    // Metal, not wood. On wood at friction 0.14 a ball crossing the corridor
+    // arrives with nothing left and dribbles down instead of completing the
+    // orbit, which on screen reads as slow motion at the top of the table.
+    ...solid(
+      'castle-roof',
+      [segment(vec(CASTLE_LEFT, CASTLE_TOP), vec(CASTLE_RIGHT, CASTLE_TOP + ROOF_FALL))],
+      METAL,
+    ),
+  ];
 }
 
 /** Inside the castle: a back wall to stop the ball, and a sensor that scores it. */

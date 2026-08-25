@@ -13,7 +13,7 @@
 
 import { createGame, stepGame, readout, PLUNGER_CHARGE_TIME } from './lib/engine/game.js';
 import { flipperSegment, flipperTip } from './lib/engine/flipper.js';
-import { TABLE_W, TABLE_H, LANE_X, DRAIN_Y } from './lib/engine/table.js';
+import { TABLE_W, TABLE_H, LANE_X, DRAIN_Y, CASTLE_LEFT, CASTLE_RIGHT, CASTLE_TOP, ROOF_FALL } from './lib/engine/table.js';
 import { applyLanguage, toggleLanguage, currentLanguage, t } from './i18n.js';
 
 const BEST_KEY = 'siege.best';
@@ -89,7 +89,7 @@ const trail = [];
  * that the two sides disagree, and they sit side by side where any difference
  * is immediately obvious.
  */
-const art = { playfield: null, ball: null, flipper: null };
+const art = { playfield: null, ball: null, flipper: null, habitrail: null };
 
 function loadArt(name, file) {
   const img = new Image();
@@ -106,6 +106,7 @@ function loadArt(name, file) {
 loadArt('playfield', 'playfield.jpg');
 loadArt('ball', 'ball.png');
 loadArt('flipper', 'flipper.png');
+loadArt('habitrail', 'habitrail.png');
 
 /* ---------- drawing ---------- */
 
@@ -328,6 +329,86 @@ function drawStateOverArt() {
   }
 }
 
+/**
+ * The habitrail over the castle, drawn along the roof the ball actually rides.
+ *
+ * This exists because the ball travelling over the castle looked like it was
+ * flying: the painted towers are underneath it and nothing showed what it was
+ * running on. A raised wire rail is what a real machine uses for exactly this,
+ * and once it is drawn the ball is on a rail rather than in mid-air.
+ *
+ * Placed from the collision, not traced onto the art, so it cannot drift: the
+ * rail is drawn along the same two points the roof collider uses.
+ */
+function drawHabitrail() {
+  const dx = CASTLE_RIGHT - CASTLE_LEFT;
+  const len = Math.hypot(dx, ROOF_FALL);
+
+  ctx.save();
+  ctx.translate(CASTLE_LEFT, CASTLE_TOP);
+  ctx.rotate(Math.atan2(ROOF_FALL, dx));
+
+  if (art.habitrail) {
+    const h = len * (art.habitrail.naturalHeight / art.habitrail.naturalWidth);
+    ctx.drawImage(art.habitrail, 0, -h * 0.45, len, h);
+    ctx.restore();
+    return;
+  }
+
+  // Drawn rather than generated, and that is the better way round here. The
+  // rail has to sit exactly on the surface the ball rolls along or it looks
+  // wrong again, and drawing it from the same two points the collider uses
+  // makes that true by construction instead of by careful placement.
+  const GAUGE = 26;
+
+  // Shadow first, offset down the table, so the rail reads as raised above the
+  // castle rather than painted onto it. Without this it is just a line.
+  ctx.strokeStyle = 'rgb(0 0 0 / 0.42)';
+  ctx.lineWidth = 9;
+  ctx.lineCap = 'round';
+  for (const off of [-GAUGE, GAUGE]) {
+    ctx.beginPath();
+    ctx.moveTo(6, off + 18);
+    ctx.lineTo(len - 6, off + 18);
+    ctx.stroke();
+  }
+
+  // Posts holding the rail up, drawn under the wires.
+  ctx.strokeStyle = '#8d8378';
+  ctx.lineWidth = 7;
+  for (let x = 40; x < len - 20; x += 96) {
+    ctx.beginPath();
+    ctx.moveTo(x, -GAUGE);
+    ctx.lineTo(x, GAUGE);
+    ctx.stroke();
+    ctx.fillStyle = '#b9ad9d';
+    for (const off of [-GAUGE, GAUGE]) {
+      ctx.beginPath();
+      ctx.arc(x, off, 6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // The wires themselves: a warm body with a bright specular line along the top.
+  for (const off of [-GAUGE, GAUGE]) {
+    ctx.strokeStyle = '#6f6459';
+    ctx.lineWidth = 10;
+    ctx.beginPath();
+    ctx.moveTo(0, off);
+    ctx.lineTo(len, off);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#e6d9b8';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(0, off - 2.5);
+    ctx.lineTo(len, off - 2.5);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
 /** Everything the geometry cannot say: lit inserts, the open gate, the siege. */
 function drawLights(now) {
   const r = readout(game);
@@ -477,6 +558,7 @@ function render(now) {
   } else {
     drawStateOverArt();
   }
+  drawHabitrail();
   drawLights(now);
   drawFlipper(game.left, art.flipper);
   drawFlipper(game.right, art.flipper);
