@@ -77,6 +77,11 @@ nav {
   font-size: 0.75rem;
   padding: 0.25rem 0.6rem;
   cursor: pointer;
+  /* The portfolio link wears this too, and an anchor brings its own colour and
+     underline unless told otherwise. */
+  text-decoration: none;
+  line-height: 1.5;
+  display: inline-block;
 }
 
 .ghost:hover,
