@@ -113,6 +113,17 @@ export const METAL: Material = { restitution: 0.45, friction: 0.05 };
 export const RUBBER: Material = { restitution: 0.72, friction: 0.32 };
 export const PLASTIC: Material = { restitution: 0.52, friction: 0.18 };
 
+/**
+ * A habitrail: almost frictionless, and deliberately dead.
+ *
+ * The ball is meant to *run* along a rail, not bounce down it. Metal at 0.45
+ * restitution kept throwing it back up into the ceiling, and every one of those
+ * bounces cost speed, so it arrived at the far end crawling. Low restitution
+ * keeps it hugging the rail and near zero friction lets it hold its pace, which
+ * is what a real wire lane does.
+ */
+export const RAIL: Material = { restitution: 0.12, friction: 0.005 };
+
 export interface Ball {
   readonly pos: Vec;
   readonly vel: Vec;
