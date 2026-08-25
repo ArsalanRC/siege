@@ -218,7 +218,21 @@ function castle(): Collider[] {
     // Every ball therefore comes back down the side it went up, and the left
     // orbit is reached the way a real table reaches it, with a flipper shot.
     segment(vec(CASTLE_LEFT, TOP_WALL_Y), vec(CASTLE_LEFT, CASTLE_BOTTOM)),
-    segment(vec(CASTLE_RIGHT, TOP_WALL_Y), vec(CASTLE_RIGHT, CASTLE_BOTTOM)),
+    segment(vec(CASTLE_RIGHT, 130), vec(CASTLE_RIGHT, CASTLE_BOTTOM)),
+    // The top of the right orbit, closed with a diagonal instead of a corner.
+    //
+    // The wall used to run straight up to the ceiling at x=800. The painted
+    // castle only reaches about y=75 at the tower tops, so between there and
+    // the ceiling was a solid wall standing in bare wood with nothing drawn on
+    // it. A launched ball hit it head on, rattled in the corner and fell back
+    // down, which is exactly what an invisible wall feels like.
+    //
+    // The diagonal turns the orbit instead of ending it: a ball arriving at
+    // speed is guided back down the right hand side rather than stopped. It is
+    // still sealed, because there is no room to pass over the castle in this
+    // art: the painted gable peaks at y=45 under a ceiling at y=12, and 33
+    // units will not pass a 54 unit ball.
+    segment(vec(CASTLE_RIGHT, 130), vec(LANE_X, 30), 8),
     segment(vec(CASTLE_LEFT, CASTLE_BOTTOM), vec(gateLeft, CASTLE_BOTTOM)),
     segment(vec(gateRight, CASTLE_BOTTOM), vec(CASTLE_RIGHT, CASTLE_BOTTOM)),
   ];
