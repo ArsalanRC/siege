@@ -273,6 +273,25 @@ canvas {
 @media (hover: none) and (pointer: coarse) {
   .touch {
     display: flex;
+    /* Above the footer, and the footer is gone anyway. Belt and braces, because
+       the thing being protected here is the only way to play on a phone. */
+    position: relative;
+    z-index: 6;
+  }
+
+  /*
+   * No footer on a phone.
+   *
+   * The page is a column that fills the viewport, and on a short screen the
+   * touch row is the part that gets squeezed. The footer then sat over the
+   * bottom of all three pads and swallowed every tap that landed there: the
+   * controls were visible and dead, which is worse than not drawing them.
+   *
+   * The footer is one line of prose and a link to the repo, and both are on the
+   * page it links to. The buttons are the only way to play. So the buttons win.
+   */
+  footer.bar {
+    display: none;
   }
 }
 
