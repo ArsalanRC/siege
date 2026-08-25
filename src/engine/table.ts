@@ -787,12 +787,27 @@ function scoopOpening(centre: Vec, radius: number, mouth: readonly [Vec, Vec]): 
   return [at(to - SCOOP_HALF_OPEN), at(to + SCOOP_HALF_OPEN)];
 }
 
-function scoopLips(): {
-  leftUpper: Vec; leftLower: Vec; rightUpper: Vec; rightLower: Vec;
-} {
-  const [lu, ll] = scoopOpening(SCOOP_LEFT_CENTRE, SCOOP_LEFT_R, SCOOP_LEFT_MOUTH);
-  const [ru, rl] = scoopOpening(SCOOP_RIGHT_CENTRE, SCOOP_RIGHT_R, SCOOP_RIGHT_MOUTH);
-  return { leftUpper: lu, leftLower: ll, rightUpper: ru, rightLower: rl };
+/**
+ * Pair each end of the mouth with the lip on its own side.
+ *
+ * By NEAREST, never by name. The two lips come back in the order the angles run,
+ * which reverses between a bowl that opens right and one that opens left, so
+ * naming them "upper" and "lower" was true on one side and a lie on the other.
+ * The right scoop's throat was therefore wired as a cross: the top of the mouth
+ * ran to the bottom of the bowl and the bottom to the top, which sealed the
+ * entrance completely. Two thousand seven hundred test launches from every angle
+ * caught 67 balls in the left scoop and none at all in the right, and it was
+ * reported from play before the test was written: "because of the purple line
+ * the right side scoop is unreachable".
+ */
+function scoopThroat(centre: Vec, radius: number, mouth: readonly [Vec, Vec]): [Segment, Segment] {
+  const [p, q] = scoopOpening(centre, radius, mouth);
+  const d = (a: Vec, b: Vec) => Math.hypot(a.x - b.x, a.y - b.y);
+  const straight = d(mouth[0], p) + d(mouth[1], q);
+  const crossed = d(mouth[0], q) + d(mouth[1], p);
+  return straight <= crossed
+    ? [segment(mouth[0], p, 4), segment(mouth[1], q, 4)]
+    : [segment(mouth[0], q, 4), segment(mouth[1], p, 4)];
 }
 
 /** The arc a bowl's wall covers: everything the opening does not. */
@@ -819,7 +834,6 @@ function scoopArc(centre: Vec, radius: number, mouth: readonly [Vec, Vec]): Segm
  * is no step where they meet.
  */
 function scoops(): Collider[] {
-  const lips = scoopLips();
   return [
     // The bowl walls. The left is open from -30 to 70 degrees, so its wall is
     // the rest of the circle; the right is open from 110 to 210.
@@ -828,10 +842,8 @@ function scoops(): Collider[] {
     // The throat: two short walls from the gap in the playfield wall into the
     // bowl, so the ball is funnelled rather than dropped into a slot.
     ...solid('scoopwall', [
-      segment(SCOOP_LEFT_MOUTH[0], lips.leftUpper, 4),
-      segment(SCOOP_LEFT_MOUTH[1], lips.leftLower, 4),
-      segment(SCOOP_RIGHT_MOUTH[0], lips.rightUpper, 4),
-      segment(SCOOP_RIGHT_MOUTH[1], lips.rightLower, 4),
+      ...scoopThroat(SCOOP_LEFT_CENTRE, SCOOP_LEFT_R, SCOOP_LEFT_MOUTH),
+      ...scoopThroat(SCOOP_RIGHT_CENTRE, SCOOP_RIGHT_R, SCOOP_RIGHT_MOUTH),
     ], PLASTIC),
     // The catch is a sensor at the back of each bowl, not the wall. A ball that
     // merely clips the mouth on its way past is not caught; it has to get far
