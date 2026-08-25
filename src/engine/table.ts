@@ -86,7 +86,12 @@ const CASTLE_BOTTOM = 495;
 /**
  * How far the roof drops from left to right, over 568 units of run.
  *
- * Seventy-three, which is what the drawn habitrail actually falls across the
+ * Eighty-four, MEASURED off the habitrail image rather than judged by eye.
+ *
+ * It was set to 73 by looking at the picture, and 73 against a true 84 puts the
+ * ball eleven units off the drawn rail by the right hand end, which is visible
+ * and was reported. Scan the image for the top of the upper wire and fit the
+ * slope; do not estimate it. It falls across the
  * castle. The collision follows the art here rather than the other way round,
  * because the ball has to ride on the rail you can see. Eighteen was tried and the ball
  * simply stopped up there: one and a half degrees does not beat the friction of
@@ -94,7 +99,7 @@ const CASTLE_BOTTOM = 495;
  * under a ceiling has to shed a slow ball on its own or it is a trap with extra
  * steps.
  */
-export const ROOF_FALL = 73;
+export const ROOF_FALL = 84;
 
 /**
  * The apex of the painted gable, and it is not decoration.

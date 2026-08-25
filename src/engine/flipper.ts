@@ -35,7 +35,14 @@ export type Side = 'left' | 'right';
 const HALF_SWEEP = 0.52;
 
 export const FLIPPER_LENGTH = 150;
-export const FLIPPER_RADIUS = 12;
+/**
+ * Sixteen, not twelve, to match the bat that is actually drawn.
+ *
+ * The sprite's gold pivot boss is visibly wider than a 12 unit capsule, so a
+ * ball aimed at the base of the flipper passed straight through the part of it
+ * you can see. Reported as "the corner of the lever is just not hittable".
+ */
+export const FLIPPER_RADIUS = 16;
 
 /** Radians per second on the way up, from 60 degrees in 35 milliseconds. */
 export const FLIP_SPEED = 32;

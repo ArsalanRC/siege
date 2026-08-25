@@ -93,9 +93,13 @@ describe('the plunger', () => {
   });
 
   it('carries the ball up the lane and out onto the playfield', () => {
+    // Two and a half seconds, not 1.2. A full launch now climbs the lane, runs
+    // the habitrail across the castle and comes down the far side, so it is
+    // legitimately still right of the rail at 1.2 seconds. The property being
+    // tested is that it reaches the playfield at all, not how fast.
     const g = createGame();
     launch(g);
-    run(g, 1.2);
+    run(g, 2.5);
     expect(g.ball.pos.x).toBeLessThan(LANE_X);
   });
 });
