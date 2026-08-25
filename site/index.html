@@ -5,7 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title data-i18n="meta.title">SIEGE</title>
     <meta name="description" data-i18n-attr="content" data-i18n="meta.description" content="" />
-    <link rel="stylesheet" href="style.css" />
+    <!--
+      The ?v on the stylesheet and the script is a cache buster, and it is here
+      because of a real hour lost rather than because it is tidy.
+
+      A normal reload gives you the new HTML and the old CSS, so a change lands
+      looking half applied and the obvious conclusion is that the change did not
+      work. It happened twice on the geometry key: the markup arrived, the styles
+      did not, and the legend rendered as a row of plain text in the footer.
+
+      Bump the number whenever style.css or app.js changes. It costs one edit and
+      it means a plain reload is enough.
+    -->
+    <link rel="stylesheet" href="style.css?v=2" />
   </head>
   <body>
     <header class="bar">
@@ -69,6 +81,6 @@
       <a href="https://github.com/ArsalanRC/siege" rel="noreferrer">Source</a>
     </footer>
 
-    <script type="module" src="app.js"></script>
+    <script type="module" src="app.js?v=2"></script>
   </body>
 </html>
