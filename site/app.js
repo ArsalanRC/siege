@@ -342,18 +342,25 @@ function drawStateOverArt() {
  */
 function drawHabitrail() {
   const dx = CASTLE_RIGHT - CASTLE_LEFT;
-  const len = Math.hypot(dx, ROOF_FALL);
 
+  // The generated rail is drawn WITHOUT rotating it. The artwork already falls
+  // left to right by its own 73 units, so rotating it as well would double the
+  // slope and the ball would ride off the drawn rail at one end. `ROOF_FALL` was
+  // set from the picture instead, which is the right way round: the ball has to
+  // roll along the rail the player can see.
+  if (art.habitrail) {
+    const w = dx;
+    const h = w * (art.habitrail.naturalHeight / art.habitrail.naturalWidth);
+    // 0.152 is where the upper rail sits down the image, measured off it.
+    ctx.drawImage(art.habitrail, CASTLE_LEFT, CASTLE_TOP - h * 0.152, w, h);
+    return;
+  }
+
+  const len = Math.hypot(dx, ROOF_FALL);
   ctx.save();
   ctx.translate(CASTLE_LEFT, CASTLE_TOP);
   ctx.rotate(Math.atan2(ROOF_FALL, dx));
 
-  if (art.habitrail) {
-    const h = len * (art.habitrail.naturalHeight / art.habitrail.naturalWidth);
-    ctx.drawImage(art.habitrail, 0, -h * 0.45, len, h);
-    ctx.restore();
-    return;
-  }
 
   // Drawn rather than generated, and that is the better way round here. The
   // rail has to sit exactly on the surface the ball rolls along or it looks

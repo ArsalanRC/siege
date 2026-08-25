@@ -39,7 +39,7 @@ import { vec } from './vec.js';
 import type { Segment } from './shapes.js';
 import { arcToSegments, polyline, segment } from './shapes.js';
 import type { Collider, Material } from './physics.js';
-import { WOOD, METAL, RUBBER, PLASTIC } from './physics.js';
+import { WOOD, METAL, RUBBER, PLASTIC, RAIL } from './physics.js';
 
 export const TABLE_W = 1024;
 export const TABLE_H = 1536;
@@ -86,13 +86,15 @@ const CASTLE_BOTTOM = 495;
 /**
  * How far the roof drops from left to right, over 568 units of run.
  *
- * Sixty, which is about six degrees. Eighteen was tried first and the ball
+ * Seventy-three, which is what the drawn habitrail actually falls across the
+ * castle. The collision follows the art here rather than the other way round,
+ * because the ball has to ride on the rail you can see. Eighteen was tried and the ball
  * simply stopped up there: one and a half degrees does not beat the friction of
  * the wood, so it crept along at 5 units a second and never came off. A roof
  * under a ceiling has to shed a slow ball on its own or it is a trap with extra
  * steps.
  */
-export const ROOF_FALL = 60;
+export const ROOF_FALL = 73;
 
 /**
  * The apex of the painted gable, and it is not decoration.
@@ -236,7 +238,7 @@ function castle(): Collider[] {
     ...solid(
       'castle-roof',
       [segment(vec(CASTLE_LEFT, CASTLE_TOP), vec(CASTLE_RIGHT, CASTLE_TOP + ROOF_FALL))],
-      METAL,
+      RAIL,
     ),
   ];
 }
