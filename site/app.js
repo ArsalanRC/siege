@@ -959,11 +959,22 @@ el.lang.addEventListener('click', () => {
   updateHud(readout(game));
 });
 
-el.debug.addEventListener('click', () => {
+function toggleGeometry() {
   showGeometry = !showGeometry;
   el.debug.setAttribute('aria-pressed', String(showGeometry));
   if (showGeometry) buildGeometryKey();
   el.geokey.hidden = !showGeometry;
+}
+
+el.debug.addEventListener('click', toggleGeometry);
+
+// G, as well as the button. Auditing the table means turning this on and off
+// dozens of times against the same frame, and reaching for a button in the
+// corner every time is enough friction to stop you checking.
+addEventListener('keydown', (e) => {
+  if (e.code !== 'KeyG' || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+  e.preventDefault();
+  toggleGeometry();
 });
 
 /*
