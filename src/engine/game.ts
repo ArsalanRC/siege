@@ -33,6 +33,17 @@ import { buildTable, DRAIN_Y, LANE_X, PLUNGER_REST, FLIPPER_PIVOT_LEFT, FLIPPER_
 
 export const BALLS_PER_GAME = 3;
 
+/**
+ * Seconds of ball save from each launch.
+ *
+ * A drain inside this window returns the ball instead of taking it. Real
+ * machines do this, and this table needs it more than most: the first thing a
+ * new player does is launch, watch the ball go somewhere they had no chance of
+ * reading, and lose it. Three balls of that is not a game, it is a slot machine
+ * with worse odds.
+ */
+export const BALL_SAVE_SECONDS = 8;
+
 /** Rolling resistance on the wood, per second. Tuned so a slow ball still drifts. */
 const DRAG = 0.22;
 
@@ -59,6 +70,7 @@ export type GameEvent =
   | { kind: 'gateOpen' }
   | { kind: 'keepTaken'; level: number }
   | { kind: 'drain' }
+  | { kind: 'ballSaved' }
   | { kind: 'gameOver'; score: number };
 
 export interface Input {
@@ -88,6 +100,10 @@ export interface Game {
   cooldowns: Map<string, number>;
   /** Counts down while the ball is lost, before the next one is served. */
   serveDelay: number;
+  /** Seconds of ball save left on this ball. A drain inside it is forgiven. */
+  ballSave: number;
+  /** Whether this ball has already used its save. One per ball, not per serve. */
+  saveSpent: boolean;
 }
 
 export function createGame(): Game {
@@ -107,6 +123,8 @@ export function createGame(): Game {
     plungerCharge: 0,
     cooldowns: new Map(),
     serveDelay: 0,
+    ballSave: 0,
+    saveSpent: false,
   };
 }
 
@@ -116,6 +134,10 @@ function serve(g: Game): void {
   g.plungerCharge = 0;
   g.phase = 'ready';
   g.cooldowns.clear();
+  // One save per ball, not per serve. Granting it on every serve made the save
+  // return a saved ball with a fresh save, so the ball could never be lost: a
+  // measured run took 79 saves and the game simply never ended.
+  g.ballSave = g.saveSpent ? 0 : BALL_SAVE_SECONDS;
 }
 
 /** True if this id may score right now, and starts its cooldown if so. */
@@ -284,6 +306,17 @@ function updatePlunger(g: Game, input: Input, dt: number): void {
 function checkDrain(g: Game, events: GameEvent[]): void {
   if (g.ball.pos.y <= DRAIN_Y) return;
 
+  // Saved. The ball comes straight back and nothing else about the game moves:
+  // same ball number, same siege level, same targets. Only the save is spent.
+  if (g.ballSave > 0) {
+    g.ballSave = 0;
+    g.saveSpent = true;
+    events.push({ kind: 'ballSaved' });
+    g.phase = 'ballLost';
+    g.serveDelay = 0.7;
+    return;
+  }
+
   events.push({ kind: 'drain' });
   g.ballsLeft -= 1;
 
@@ -294,6 +327,7 @@ function checkDrain(g: Game, events: GameEvent[]): void {
   }
 
   g.ballNumber += 1;
+  g.saveSpent = false;
   g.gateOpen = false;
   g.siegeLevel = 1;
   g.targetsDown = [false, false, false];
@@ -320,6 +354,8 @@ export function stepGame(g: Game, input: Input, dt: number): GameEvent[] {
   // waiting for a ball. It costs nothing and a still table feels broken.
   g.left = stepFlipper(g.left, input.left, dt);
   g.right = stepFlipper(g.right, input.right, dt);
+
+  if (g.phase === 'playing' && g.ballSave > 0) g.ballSave = Math.max(0, g.ballSave - dt);
 
   if (g.phase === 'ballLost') {
     g.serveDelay -= dt;
@@ -353,6 +389,8 @@ export interface Readout {
   readonly targetsDown: readonly boolean[];
   readonly phase: Phase;
   readonly plungerCharge: number;
+  /** Seconds of ball save left, for the scoreboard to show. */
+  readonly ballSave: number;
 }
 
 export function readout(g: Game): Readout {
@@ -365,6 +403,7 @@ export function readout(g: Game): Readout {
     targetsDown: [...g.targetsDown],
     phase: g.phase,
     plungerCharge: g.plungerCharge,
+    ballSave: g.ballSave,
   };
 }
 

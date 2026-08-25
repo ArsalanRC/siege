@@ -280,6 +280,9 @@ describe('losing balls', () => {
     const g = createGame();
     for (let i = 0; i < BALLS_PER_GAME; i++) {
       g.phase = 'playing';
+      // Spend the ball save, or each ball is forgiven its first drain and the
+      // game needs six of them rather than three.
+      g.ballSave = 0;
       g.ball = { pos: vec(470, DRAIN_Y + 5), vel: vec(0, 500), radius: BALL_RADIUS };
       stepGame(g, NO_INPUT, DT);
       if (readout(g).phase === 'ballLost') run(g, 2);

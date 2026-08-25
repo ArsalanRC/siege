@@ -497,6 +497,8 @@ function consume(events) {
     else if (e.kind === 'sling') flash(e.at.x, e.at.y, 40, '255 140 120');
     else if (e.kind === 'keepTaken') flash(LANE_X / 2, 300, 200, '255 225 150', 900);
     else if (e.kind === 'gateOpen') flash(LANE_X / 2, 400, 160, '216 168 66', 700);
+    // A save that looks identical to losing a ball teaches the player nothing.
+    else if (e.kind === 'ballSaved') flash(LANE_X / 2, 1300, 240, '120 255 170', 1100);
     else if (e.kind === 'gameOver') finish(e.score);
   }
 }
