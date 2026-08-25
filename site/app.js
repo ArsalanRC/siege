@@ -351,8 +351,10 @@ function drawHabitrail() {
   if (art.habitrail) {
     const w = dx;
     const h = w * (art.habitrail.naturalHeight / art.habitrail.naturalWidth);
-    // 0.152 is where the upper rail sits down the image, measured off it.
-    ctx.drawImage(art.habitrail, CASTLE_LEFT, CASTLE_TOP - h * 0.152, w, h);
+    // 0.125 is where the top of the upper wire sits down the image. Measured by
+    // scanning the alpha for the first opaque row, not judged by eye: the eyeballed
+    // 0.152 put the ball off the rail.
+    ctx.drawImage(art.habitrail, CASTLE_LEFT, CASTLE_TOP - h * 0.125, w, h);
     return;
   }
 
@@ -414,6 +416,55 @@ function drawHabitrail() {
   }
 
   ctx.restore();
+}
+
+/**
+ * The two lower walls, drawn.
+ *
+ * They close the outlanes, and until now they were real colliders sitting on
+ * bare wood with nothing on them: a ball would turn in mid air against nothing.
+ * Reported as "some transparent railing where the 2 levers are", and it is the
+ * same defect as the ball flying over the castle.
+ *
+ * Drawn from the colliders rather than traced onto the art, for the reason the
+ * habitrail proved: geometry the drawing is derived from cannot drift away from
+ * it.
+ */
+function drawLowerRails() {
+  for (const c of game.table.colliders) {
+    if (!c.id.startsWith('lower') || !c.seg) continue;
+    const { a, b } = c.seg;
+
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgb(0 0 0 / 0.38)';
+    ctx.lineWidth = 13;
+    ctx.beginPath();
+    ctx.moveTo(a.x + 3, a.y + 9);
+    ctx.lineTo(b.x + 3, b.y + 9);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#6f6459';
+    ctx.lineWidth = 13;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#e6d9b8';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y - 3);
+    ctx.lineTo(b.x, b.y - 3);
+    ctx.stroke();
+
+    // A post at each end, so it reads as a fitted rail and not a painted stripe.
+    for (const p of [a, b]) {
+      ctx.fillStyle = '#b9ad9d';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
 }
 
 /** Everything the geometry cannot say: lit inserts, the open gate, the siege. */
@@ -566,6 +617,7 @@ function render(now) {
     drawStateOverArt();
   }
   drawHabitrail();
+  drawLowerRails();
   drawLights(now);
   drawFlipper(game.left, art.flipper);
   drawFlipper(game.right, art.flipper);
