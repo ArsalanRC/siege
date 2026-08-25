@@ -97,18 +97,43 @@ const BAT_TAPER: readonly number[] = [
   1.00, 0.94, 0.87, 0.81, 0.76, 0.71, 0.64, 0.57, 0.49, 0.41, 0.36,
 ];
 
-/** How the sprite maps onto the bat: hinge and tip, in fractions of its width. */
+/**
+ * How the sprite maps onto the bat, in fractions of its own width and height.
+ *
+ * All five numbers come from the same alpha scan. The renderer scales the image
+ * so the hinge lands on the pivot, the tip lands on the tip, and the half-height
+ * at the hinge equals the collision radius, then takes the spine's droop out.
+ */
 export const BAT_SPRITE = {
-  /** Where the pivot boss sits in the image, as a fraction of width and height. */
+  /** Where the pivot boss sits in the image. */
   hingeX: 76 / 512,
   hingeY: 73.5 / 148,
-  /** Where the tip sits, as a fraction of width. */
+  /** Where the tip sits across the image. */
   tipX: 505 / 512,
-  /** Half-height at the hinge, as a fraction of image height. Sets the scale. */
+  /** A second point on the spine, far along it, which fixes the droop. */
+  farX: 485 / 512,
+  farY: 111.5 / 148,
+  /** Half-height at the hinge. This is what sets the vertical scale. */
   hingeHalf: 73.5 / 148,
-  /** The spine's droop inside the image, in radians, taken out when drawing. */
-  droop: Math.atan2((111.5 - 73.5) / 148, ((485 - 76) / 512) * (512 / 429)),
 } as const;
+
+/**
+ * The spine's droop once the sprite is drawn at `w` by `h`, in radians.
+ *
+ * It cannot be a constant, and trying to make it one is what put the bats in the
+ * wrong place: the image is scaled by different factors across and down, so the
+ * angle its own spine makes on screen depends on the size it is drawn at. The
+ * constant came out at 15.1 degrees against a true 6.2, and over-rotating by
+ * nine degrees swings the whole sprite off its pivot, because the hinge offset
+ * is applied inside the rotated frame. Reported as "the right lever is in the
+ * wrong position".
+ */
+export function batDroop(w: number, h: number): number {
+  return Math.atan2(
+    (BAT_SPRITE.farY - BAT_SPRITE.hingeY) * h,
+    (BAT_SPRITE.farX - BAT_SPRITE.hingeX) * w,
+  );
+}
 
 /** Radians per second on the way up, from 60 degrees in 35 milliseconds. */
 export const FLIP_SPEED = 32;

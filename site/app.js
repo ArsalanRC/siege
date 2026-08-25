@@ -12,7 +12,7 @@
  */
 
 import { createGame, stepGame, readout, PLUNGER_CHARGE_TIME } from './lib/engine/game.js';
-import { flipperSegment, flipperSegments, flipperTip, BAT_SPRITE } from './lib/engine/flipper.js';
+import { flipperSegment, flipperSegments, flipperTip, BAT_SPRITE, batDroop } from './lib/engine/flipper.js';
 import { TABLE_W, TABLE_H, LANE_X, DRAIN_Y, CASTLE_LEFT, CASTLE_RIGHT, CASTLE_TOP, ROOF_FALL, RAIL_IMAGE_TOP, RAIL_IMAGE_H } from './lib/engine/table.js';
 import { applyLanguage, toggleLanguage, currentLanguage, t } from './i18n.js';
 
@@ -685,9 +685,14 @@ function drawFlipper(f, image) {
 
     // The artist drew the bat at a slight angle inside its own image. That is a
     // property of the picture, not of the machine, so it comes back out here
-    // rather than being inherited by the physics. The mirror above flips the
-    // sense of it, which is why the sign follows the side.
-    ctx.rotate(f.side === 'left' ? BAT_SPRITE.droop : -BAT_SPRITE.droop);
+    // rather than being inherited by the physics.
+    //
+    // The same sign on both sides, and the mirror does NOT change it. Reasoning
+    // that a vertical flip reverses the rotation sense gave the left bat +droop,
+    // and measuring where the sprite's tip actually landed said otherwise: 26.9
+    // units off with the sign flipped, 1.3 units off without. The flip is
+    // applied to the frame the rotation is measured in, so the two cancel.
+    ctx.rotate(-batDroop(w, h));
 
     ctx.drawImage(image, -BAT_SPRITE.hingeX * w, -BAT_SPRITE.hingeY * h, w, h);
     ctx.restore();
@@ -812,14 +817,34 @@ function drawGeometry() {
     }
 
     ctx.setLineDash([]);
-    // Every piece of the bat, so the overlay shows the wedge rather than a rod.
-    for (const f of [game.left, game.right]) {
-      for (const seg of flipperSegments(f)) {
-        ctx.strokeStyle = pass === 0 ? 'rgb(0 0 0 / 0.85)' : '#ffffff';
-        ctx.lineWidth = pass === 0 ? seg.radius * 2 + 5 : seg.radius * 2;
+    // The bat gets a wash and a spine rather than the solid body everything else
+    // gets, and that is because it is the one collider you need to see AGAINST
+    // the thing it stands for. Painted solid, with the black casing under it, it
+    // covered its own sprite completely: the only way to compare the two shapes
+    // was to switch the overlay off, which is the opposite of what an overlay is
+    // for.
+    if (pass === 1) {
+      for (const f of [game.left, game.right]) {
+        for (const seg of flipperSegments(f)) {
+          ctx.strokeStyle = 'rgb(255 255 255 / 0.26)';
+          ctx.lineWidth = seg.radius * 2;
+          ctx.beginPath();
+          ctx.moveTo(seg.a.x, seg.a.y);
+          ctx.lineTo(seg.b.x, seg.b.y);
+          ctx.stroke();
+        }
+        const spine = flipperSegment(f);
+        ctx.strokeStyle = 'rgb(0 0 0 / 0.7)';
+        ctx.lineWidth = 6;
         ctx.beginPath();
-        ctx.moveTo(seg.a.x, seg.a.y);
-        ctx.lineTo(seg.b.x, seg.b.y);
+        ctx.moveTo(spine.a.x, spine.a.y);
+        ctx.lineTo(spine.b.x, spine.b.y);
+        ctx.stroke();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(spine.a.x, spine.a.y);
+        ctx.lineTo(spine.b.x, spine.b.y);
         ctx.stroke();
       }
     }
