@@ -23,13 +23,16 @@
  */
 
 import type { Vec } from './vec.js';
-import { vec, len } from './vec.js';
+import { vec, len, scale } from './vec.js';
 import type { Ball, Hit, World, Collider } from './physics.js';
 import { step as stepPhysics, BALL_RADIUS, GRAVITY } from './physics.js';
 import type { Flipper } from './flipper.js';
 import { createFlipper, stepFlipper, flipperCollider } from './flipper.js';
 import type { Table } from './table.js';
-import { buildTable, DRAIN_Y, LANE_X, PLUNGER_REST, FLIPPER_PIVOT_LEFT, FLIPPER_PIVOT_RIGHT } from './table.js';
+import {
+  buildTable, DRAIN_Y, LANE_X, PLUNGER_REST, SCOOP_KICK,
+  FLIPPER_PIVOT_LEFT, FLIPPER_PIVOT_RIGHT,
+} from './table.js';
 
 export const BALLS_PER_GAME = 3;
 
@@ -53,6 +56,21 @@ const COOLDOWN = 0.25;
 /** Longer for targets, which are struck hard and can rattle. */
 const TARGET_COOLDOWN = 0.4;
 
+/**
+ * How long a scoop keeps the ball, and how long it stays shut afterwards.
+ *
+ * The hold is what makes it read as a hole rather than as a bounce: long enough
+ * to see the ball sitting in the lane, short enough that it never feels like the
+ * game has frozen. The cooldown is the important half. Without it the ball is
+ * caught again on its way out of the same mouth it was just fired through, and
+ * the two of them trade it back and forth for ever.
+ */
+const SCOOP_HOLD = 0.9;
+const SCOOP_COOLDOWN = 1.6;
+
+/** Rolling over a lamp lens. Small, frequent, and mostly there to light up. */
+const LAMP_COOLDOWN = 0.9;
+
 /** Slowest and fastest a full plunger pull can launch, in units per second. */
 const PLUNGER_MIN = 3400;
 const PLUNGER_MAX = 7200;
@@ -66,9 +84,12 @@ export type GameEvent =
   | { kind: 'score'; amount: number; at: Vec; label: string }
   | { kind: 'bumper'; at: Vec }
   | { kind: 'sling'; at: Vec }
+  | { kind: 'lamp'; at: Vec }
   | { kind: 'target'; index: number }
   | { kind: 'gateOpen' }
   | { kind: 'keepTaken'; level: number }
+  | { kind: 'scoopCaught'; at: Vec }
+  | { kind: 'scoopFired'; at: Vec }
   | { kind: 'drain' }
   | { kind: 'ballSaved' }
   | { kind: 'gameOver'; score: number };
@@ -104,6 +125,8 @@ export interface Game {
   ballSave: number;
   /** Whether this ball has already used its save. One per ball, not per serve. */
   saveSpent: boolean;
+  /** Which scoop is holding the ball, and for how much longer. */
+  scoopHold: { index: number; timeLeft: number } | null;
 }
 
 export function createGame(): Game {
@@ -125,6 +148,7 @@ export function createGame(): Game {
     serveDelay: 0,
     ballSave: 0,
     saveSpent: false,
+    scoopHold: null,
   };
 }
 
@@ -134,6 +158,10 @@ function serve(g: Game): void {
   g.plungerCharge = 0;
   g.phase = 'ready';
   g.cooldowns.clear();
+  // A ball cannot be in a hole and in the shooter lane at the same time. This
+  // matters on a drain that happens while a scoop is holding, which cannot occur
+  // today but would leave the next ball frozen in mid air if it ever did.
+  g.scoopHold = null;
   // One save per ball, not per serve. Granting it on every serve made the save
   // return a saved ball with a fresh save, so the ball could never be lost: a
   // measured run took 79 saves and the game simply never ended.
@@ -201,7 +229,7 @@ function applyHits(g: Game, hits: readonly Hit[], events: GameEvent[]): void {
       continue;
     }
 
-    if (hit.id.startsWith('sling')) {
+    if (hit.id.startsWith('sling-')) {
       if (!claim(g, hit.id)) continue;
       award(g, events, 50, hit.point, 'sling');
       events.push({ kind: 'sling', at: hit.point });
@@ -232,6 +260,30 @@ function applyHits(g: Game, hits: readonly Hit[], events: GameEvent[]): void {
       if (!g.gateOpen) continue;
       if (!claim(g, 'gate', 1)) continue;
       takeKeep(g, events, hit.point);
+      continue;
+    }
+
+    if (hit.id.startsWith('scoop-')) {
+      // Already holding, or this mouth is still spitting the last one out.
+      if (g.scoopHold) continue;
+      if ((g.cooldowns.get(hit.id) ?? 0) > 0) continue;
+      const index = g.table.scoops.findIndex((s) => s.id === hit.id);
+      const scoop = g.table.scoops[index];
+      if (!scoop) continue;
+
+      g.scoopHold = { index, timeLeft: SCOOP_HOLD };
+      g.ball = { ...g.ball, pos: scoop.hold, vel: vec(0, 0) };
+      award(g, events, 2500 * g.siegeLevel, scoop.hold, 'scoop');
+      events.push({ kind: 'scoopCaught', at: scoop.hold });
+      // Nothing after this hit matters: the ball is not where the rest of this
+      // frame's contacts think it is any more.
+      return;
+    }
+
+    if (hit.id.startsWith('lamp-')) {
+      if (!claim(g, hit.id, LAMP_COOLDOWN)) continue;
+      award(g, events, 25 * g.siegeLevel, hit.point, 'lamp');
+      events.push({ kind: 'lamp', at: hit.point });
       continue;
     }
 
@@ -273,7 +325,22 @@ function updateGates(g: Game): void {
   // machine.
   const climbingTheLane = g.ball.pos.x > LANE_X && g.ball.vel.y < 0;
   g.table.laneGate.active = !climbingTheLane;
-  g.table.portcullis.active = !g.gateOpen;
+
+  // The portcullis never comes down on the ball's head.
+  //
+  // Taking the keep shuts the gate again, which is right, and for one frame the
+  // ball is still inside the chamber when it does. The portcullis is a level bar
+  // across the mouth, so the ball landed on top of it and stayed: a ball won the
+  // best shot on the table and was never seen again, at (541, 469). Holding the
+  // gate open until the chamber is empty costs one comparison and means the shot
+  // always pays the ball back.
+  const mouth = g.table.portcullis.seg;
+  const r = g.ball.radius;
+  const inTheKeep = !!mouth
+    && g.ball.pos.y < mouth.a.y + r
+    && g.ball.pos.x > mouth.a.x - r
+    && g.ball.pos.x < mouth.b.x + r;
+  g.table.portcullis.active = !g.gateOpen && !inTheKeep;
 }
 
 function buildWorld(g: Game): World {
@@ -361,6 +428,27 @@ export function stepGame(g: Game, input: Input, dt: number): GameEvent[] {
     g.serveDelay -= dt;
     if (g.serveDelay <= 0) serve(g);
     return events;
+  }
+
+  // A held ball is not simulated. It is pinned in the chamber, the timer runs,
+  // and when it expires the scoop fires it back out through its own mouth. This
+  // is the whole reason a hole on this table is not a trap: the release is on a
+  // clock rather than on the player finding a way out.
+  if (g.scoopHold) {
+    const scoop = g.table.scoops[g.scoopHold.index];
+    if (!scoop) {
+      g.scoopHold = null;
+    } else {
+      g.ball = { ...g.ball, pos: scoop.hold, vel: vec(0, 0) };
+      g.scoopHold.timeLeft -= dt;
+      if (g.scoopHold.timeLeft <= 0) {
+        g.ball = { ...g.ball, vel: scale(scoop.eject, SCOOP_KICK) };
+        g.cooldowns.set(scoop.id, SCOOP_COOLDOWN);
+        events.push({ kind: 'scoopFired', at: scoop.mouth });
+        g.scoopHold = null;
+      }
+      return events;
+    }
   }
 
   updatePlunger(g, input, dt);
