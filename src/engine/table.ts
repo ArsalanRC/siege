@@ -99,8 +99,8 @@ export const DRAIN_Y = 1580;
  * It is the third time this table has grown that exact wedge. At 1282 the gap is
  * 57 and the ball goes through.
  */
-export const FLIPPER_PIVOT_LEFT: Vec = vec(320, 1282);
-export const FLIPPER_PIVOT_RIGHT: Vec = vec(673, 1282);
+export const FLIPPER_PIVOT_LEFT: Vec = vec(339, 1288);
+export const FLIPPER_PIVOT_RIGHT: Vec = vec(654, 1288);
 
 /** Where a new ball is parked, on the centre line of the painted lane. */
 export const PLUNGER_REST: Vec = vec(956, 1380);
@@ -251,8 +251,17 @@ const LEFT_WALL_LOWER: ReadonlyArray<readonly [number, number]> = [
 ];
 
 /** The same scan down the right side. Not a mirror of the left: measured. */
+/**
+ * There is no wall above the right scoop's mouth. The orbit rail IS the wall.
+ *
+ * Two goes at having both taught the same thing twice. A rail aimed at the far
+ * end of a wall makes a V that closes from 73 units to nothing, and a ball found
+ * the 54 unit point of it at (784, 637). Aimed at the near end it makes a corner
+ * instead, and the wall's own free upper end became a bare post the ball perched
+ * on at (771, 582). One line doing the job of two has neither.
+ */
 const RIGHT_WALL_UPPER: ReadonlyArray<readonly [number, number]> = [
-  [745, 588], [745, 616], [756, 624], [763, 704],
+  [763, 704],
 ];
 const RIGHT_WALL_LOWER: ReadonlyArray<readonly [number, number]> = [
   [790, 774], [794, 776], [800, 792],
@@ -700,30 +709,42 @@ function bumpers(): Collider[] {
  * slingshot instead. The rail runs down from the post to the flipper pivot, the
  * outlane is the channel outside it, and the inlane is the channel inside.
  *
- * Every number here is a clearance, not a preference:
+ * Every number here is a clearance, not a preference. The budget from the wall
+ * at 177 to the back of the bat at 313 is 136 units, and the post is 24 of it,
+ * so the two lanes get 56 each and there is nothing spare:
  *
- * - outlane 177 to 234, which is **57** for a 54 unit ball
- * - the rail is 6 thick, so 234 to 246
- * - inlane 246 to 304, the back of the bat, which is **58**
- * - the post is 68 clear of the slingshot's lower corner, so a ball chooses a
+ * - outlane 177 to 233, which is **56** for a 54 unit ball
+ * - the post is 233 to 257
+ * - inlane 257 to 313, the back of the bat, which is **56**
+ * - the post is 59 clear of the slingshot's lower corner, so a ball chooses a
  *   side rather than wedging between them
  *
- * They only just fit. The whole budget from the wall to the back of the bat is
- * 127 units and two lanes and a rail need 121 of it.
+ * The rail's lower end sits 25 units from the pivot, just inside the bat's own
+ * 26 unit back, and that number is measured too. Buried deeper the rail's side
+ * emerges from the bat at an angle and makes a notch: with the bat at 26 the
+ * ball sat in that notch at (306, 1248) in seventeen games of sixty. Ending it
+ * where its rounded cap barely clears the bat leaves a bump rather than a
+ * corner, and a ball rolls off a bump.
  */
 function laneGuides(): Collider[] {
-  const out: Collider[] = [];
-  for (const side of [
-    { top: vec(246, 1266), foot: vec(306, 1276), postAt: vec(246, 1266) },
-    { top: vec(747, 1266), foot: vec(687, 1276), postAt: vec(747, 1266) },
-  ]) {
-    out.push(...solid('lower', [segment(side.top, side.foot, 6)], PLASTIC));
-    // A round cap on the top end, which is the inlane/outlane post itself. A
-    // bare segment end is a corner, and a corner beside a lane is how the last
-    // three wedges on this table started.
-    out.push(post('lower-post', side.postAt, 12, RUBBER, 220));
-  }
-  return out;
+  // One post per side and no rail, and the rail's absence is the fix rather
+  // than a simplification.
+  //
+  // A rail has to come down to the bat, and where its side emerges from the
+  // bat's 26 unit back it makes a notch of about 60 degrees. A ball sat in that
+  // notch at (304, 1249) in nineteen games of sixty, and it sat there however
+  // the flippers were played, because the back of a bat is the one part of it
+  // that does not move: surface speed is omega times radius and the radius at
+  // the pivot is nothing. Every rail angle that closes the notch puts the post
+  // inside the slingshot's clearance instead.
+  //
+  // A single post OVERLAPPING the bat has no notch to sit in at all. It also
+  // does the rail's real job, which is to stop the ball slipping behind the bat:
+  // the gap between them is negative, so there is nothing to slip through.
+  return [
+    post('lower-post', vec(295, 1290), 20, RUBBER, 220),
+    post('lower-post', vec(698, 1290), 20, RUBBER, 220),
+  ];
 }
 
 /**
@@ -887,9 +908,9 @@ function laneSensors(): Collider[] {
     // where a ball rolling down the guide rail actually is, which is a ball's
     // radius plus the rail's above the rail itself, not level with it.
     ...sensor('outlane-left', [segment(vec(180, 1330), vec(232, 1330))]),
-    ...sensor('inlane-left', [segment(vec(252, 1234), vec(300, 1242))]),
+    ...sensor('inlane-left', [segment(vec(258, 1237), vec(308, 1250))]),
     ...sensor('outlane-right', [segment(vec(761, 1330), vec(813, 1330))]),
-    ...sensor('inlane-right', [segment(vec(693, 1242), vec(741, 1234))]),
+    ...sensor('inlane-right', [segment(vec(685, 1250), vec(735, 1237))]),
   ];
 }
 

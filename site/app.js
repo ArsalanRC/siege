@@ -90,7 +90,40 @@ const trail = [];
  * that the two sides disagree, and they sit side by side where any difference
  * is immediately obvious.
  */
-const art = { playfield: null, ball: null, flipper: null, habitrail: null };
+const art = { playfield: null, ball: null, flipper: null, habitrail: null, railRise: null, railFall: null };
+
+/**
+ * Where each supplied rail's own axis runs inside its image, in image pixels.
+ *
+ * Measured by fitting a principal axis to the opaque alpha: the mounting feet at
+ * each end are what the numbers are, and they are what gets mapped onto the two
+ * ends of a collider. Same trick as the habitrail: the drawing is placed from
+ * the geometry, so a rail cannot be drawn anywhere except along the thing the
+ * ball actually runs on.
+ */
+const RAIL_ART = {
+  rise: { p0: [1640, 121], p1: [25, 828] },
+  fall: { p0: [28, 115], p1: [1666, 854] },
+};
+
+/** Draw a rail image so its own axis lands exactly on `a`..`b`. */
+function drawRailArt(image, spec, a, b) {
+  const [ax, ay] = spec.p0;
+  const [bx, by] = spec.p1;
+  const imgLen = Math.hypot(bx - ax, by - ay);
+  const imgAngle = Math.atan2(by - ay, bx - ax);
+  const segLen = Math.hypot(b.x - a.x, b.y - a.y);
+  const scale = segLen / imgLen;
+
+  ctx.save();
+  ctx.translate(a.x, a.y);
+  ctx.rotate(Math.atan2(b.y - a.y, b.x - a.x));
+  ctx.scale(scale, scale);
+  ctx.rotate(-imgAngle);
+  ctx.translate(-ax, -ay);
+  ctx.drawImage(image, 0, 0);
+  ctx.restore();
+}
 
 function loadArt(name, file) {
   const img = new Image();
@@ -108,6 +141,8 @@ loadArt('playfield', 'playfield.jpg');
 loadArt('ball', 'ball.png');
 loadArt('flipper', 'flipper.png');
 loadArt('habitrail', 'habitrail.png');
+loadArt('railRise', 'rail-rise.png');
+loadArt('railFall', 'rail-fall.png');
 
 /* ---------- drawing ---------- */
 
@@ -509,6 +544,12 @@ function drawLowerRails() {
     // same way rather than being left as a wall nobody can see.
     if (c.id.startsWith('orbit') && c.seg) {
       const { a, b } = c.seg;
+      // The orbit return falls to the LEFT, so it is the rising image: its own
+      // axis runs from the top right foot to the bottom left one.
+      if (art.railRise) {
+        drawRailArt(art.railRise, RAIL_ART.rise, a, b);
+        continue;
+      }
       ctx.lineCap = 'round';
       ctx.strokeStyle = 'rgb(0 0 0 / 0.38)';
       ctx.lineWidth = 13;
@@ -727,7 +768,7 @@ const GEOMETRY_COLOURS = [
   ['scoop-shutter', '#b0006f', 'Scoop shutters'],
   ['scoop', '#ff35ff', 'Scoops'],
   ['lamp', '#00b7ff', 'Lamp rollovers'],
-  ['lower', '#00e5c0', 'Inlane guide + post'],
+  ['lower', '#00e5c0', 'Inlane/outlane post'],
   ['orbit', '#a45cff', 'Orbit return'],
   ['castle-back', '#7a5cff', 'Keep chamber'],
   ['castle', '#00d0ff', 'Castle'],

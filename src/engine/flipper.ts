@@ -34,7 +34,22 @@ export type Side = 'left' | 'right';
 /** Half the sweep, in radians. The bat sits this far below level and swings to this far above. */
 const HALF_SWEEP = 0.52;
 
-export const FLIPPER_LENGTH = 150;
+/**
+ * A hundred and thirty, down from 150, and the drain is why.
+ *
+ * Three inches on a 20.25 inch playfield is 150 units, which is what this was.
+ * But the bat is as thick as it is drawn now, and 26 units of half-width at the
+ * hinge takes 10 out of each inlane, so the pivots moved inwards, and pivots
+ * that move inwards close the gap between the tips.
+ *
+ * That gap is the drain and it has to pass a ball. At 150 it measured 54 between
+ * the tip centres, which is exactly one ball before the tips' own radius is
+ * taken off. At 140 the centres were 72 apart and the CLEAR gap was 52.8, and
+ * the ball sat on both tips at once at (496, 1350) and never fell through: the
+ * bat tapers to 9.4 units at the tip and both of those come out of the middle.
+ * At 130 the clear gap is 70.
+ */
+export const FLIPPER_LENGTH = 130;
 /**
  * Sixteen, not twelve, to match the bat that is actually drawn.
  *
@@ -46,7 +61,17 @@ export const FLIPPER_LENGTH = 150;
  * units per metre is 12.6 units of half-width, and a rubber sleeve takes it the
  * rest of the way.
  */
-export const FLIPPER_RADIUS = 16;
+/**
+ * Twenty six, because that is how thick the bat is painted.
+ *
+ * It was 16, and when the drawing was made to match the collision the bats came
+ * out visibly thinner than before and it was reported straight away: "the levers
+ * became really thin, it was good thick ones before". That was the fix applied
+ * the wrong way round. The sprite's half-height at the hinge is what the bat
+ * looks like, so the collision moves to it rather than the other way about, and
+ * both are 26 now.
+ */
+export const FLIPPER_RADIUS = 26;
 
 /**
  * The bat's silhouette, measured off `flipper.png`.
