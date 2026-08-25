@@ -32,6 +32,7 @@ const el = {
   plungerFill: document.getElementById('plunger-fill'),
   lang: document.getElementById('lang'),
   debug: document.getElementById('debug'),
+  geokey: document.getElementById('geokey'),
 };
 
 let game = createGame();
@@ -654,36 +655,115 @@ function drawBall() {
   ctx.fill();
 }
 
-/** Every collider, exactly as the physics sees it. The check on the drawing. */
+/**
+ * Every collider, exactly as the physics sees it. The check on the drawing.
+ *
+ * This is the tool the table is audited with, so it has to be legible on top of
+ * a busy painting rather than merely correct. It used to be 2 pixel lines in one
+ * colour, which over stonework and gold leaf is close to invisible: the overlay
+ * was switched on and the honest answer to "where is the physics" was still
+ * nowhere.
+ *
+ * Two things fix that. Every line is drawn twice, a black casing first and the
+ * colour on top, which is the trick a map legend uses to stay readable over both
+ * pale and dark ground. And each kind of part has its own colour, so the
+ * question stops being "is there a line here" and becomes "is that line on the
+ * thing it is painted as".
+ */
+const GEOMETRY_COLOURS = [
+  ['bumper', '#ff8a1f', 'Bumpers'],
+  ['sling', '#ff2d55', 'Slingshot faces'],
+  ['triangle', '#ff7a95', 'Slingshot backs'],
+  ['target', '#ffd400', 'Drop targets'],
+  ['scoop', '#ff35ff', 'Scoops'],
+  ['lamp', '#00b7ff', 'Lamp rollovers'],
+  ['lower', '#00e5c0', 'Inlane guide + post'],
+  ['orbit', '#a45cff', 'Orbit return'],
+  ['castle', '#00d0ff', 'Castle'],
+  ['portcullis', '#00d0ff', null],
+  ['lane', '#dfe6ec', 'Shooter lane'],
+  ['gate', '#ffd400', null],
+  ['inlane', '#66ff33', 'Lane sensors'],
+  ['outlane', '#66ff33', null],
+  ['wall', '#00ff6a', 'Walls'],
+];
+
+function geometryColour(id) {
+  for (const [prefix, colour] of GEOMETRY_COLOURS) {
+    if (id.startsWith(prefix)) return colour;
+  }
+  return '#00ff6a';
+}
+
 function drawGeometry() {
   ctx.save();
-  for (const c of game.table.colliders) {
-    const live = c.active;
-    ctx.strokeStyle = c.sensor ? '#4bb3ff' : live ? '#5cff9d' : '#ff5c5c';
-    ctx.setLineDash(c.sensor ? [10, 8] : []);
-    ctx.lineWidth = 2;
-    if (c.type === 'circle' && c.circle) {
+  ctx.lineCap = 'round';
+
+  // Pass 0 lays a black casing under everything, pass 1 puts the colour on top.
+  for (const pass of [0, 1]) {
+    for (const c of game.table.colliders) {
+      ctx.setLineDash(c.sensor ? [14, 10] : []);
+      ctx.strokeStyle = pass === 0
+        ? 'rgb(0 0 0 / 0.85)'
+        : c.active ? geometryColour(c.id) : '#ff3b30';
+      ctx.lineWidth = pass === 0 ? 11 : 6;
       ctx.beginPath();
-      ctx.arc(c.circle.c.x, c.circle.c.y, c.circle.radius, 0, Math.PI * 2);
+      if (c.type === 'circle' && c.circle) {
+        ctx.arc(c.circle.c.x, c.circle.c.y, c.circle.radius, 0, Math.PI * 2);
+      } else if (c.seg) {
+        ctx.moveTo(c.seg.a.x, c.seg.a.y);
+        ctx.lineTo(c.seg.b.x, c.seg.b.y);
+      } else {
+        continue;
+      }
       ctx.stroke();
-    } else if (c.seg) {
+    }
+
+    ctx.setLineDash([]);
+    for (const f of [game.left, game.right]) {
+      const seg = flipperSegment(f);
+      ctx.strokeStyle = pass === 0 ? 'rgb(0 0 0 / 0.85)' : '#ffffff';
+      ctx.lineWidth = pass === 0 ? f.radius * 2 + 6 : f.radius * 2;
       ctx.beginPath();
-      ctx.moveTo(c.seg.a.x, c.seg.a.y);
-      ctx.lineTo(c.seg.b.x, c.seg.b.y);
+      ctx.moveTo(seg.a.x, seg.a.y);
+      ctx.lineTo(seg.b.x, seg.b.y);
       ctx.stroke();
     }
   }
-  ctx.setLineDash([]);
-  ctx.strokeStyle = '#ffd24b';
-  ctx.lineWidth = 2;
-  for (const f of [game.left, game.right]) {
-    const seg = flipperSegment(f);
+
+  // Where each scoop parks the ball. Nothing else on the table moves the ball
+  // without touching it, so it is worth being able to see where it goes.
+  for (const s of game.table.scoops) {
+    ctx.fillStyle = 'rgb(0 0 0 / 0.85)';
     ctx.beginPath();
-    ctx.moveTo(seg.a.x, seg.a.y);
-    ctx.lineTo(seg.b.x, seg.b.y);
-    ctx.stroke();
+    ctx.arc(s.hold.x, s.hold.y, 12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ff35ff';
+    ctx.beginPath();
+    ctx.arc(s.hold.x, s.hold.y, 9, 0, Math.PI * 2);
+    ctx.fill();
   }
+
   ctx.restore();
+}
+
+/**
+ * Fill the key in the page margin once, the first time the overlay is used.
+ *
+ * Built from the same list the drawing uses, so a part cannot be given a colour
+ * on the board and a different one in the legend.
+ */
+function buildGeometryKey() {
+  if (el.geokey.childElementCount) return;
+  const rows = GEOMETRY_COLOURS
+    .filter(([, , label]) => label)
+    .map(([, colour, label]) =>
+      `<span style="color:${colour}"><i></i>${label}</span>`)
+    .join('');
+  el.geokey.innerHTML =
+    `<b>Geometry</b>${rows}` +
+    `<span style="color:#ffffff"><i></i>Flippers</span>` +
+    `<small>dashed = sensor · red = switched off</small>`;
 }
 
 function render(now) {
@@ -882,6 +962,8 @@ el.lang.addEventListener('click', () => {
 el.debug.addEventListener('click', () => {
   showGeometry = !showGeometry;
   el.debug.setAttribute('aria-pressed', String(showGeometry));
+  if (showGeometry) buildGeometryKey();
+  el.geokey.hidden = !showGeometry;
 });
 
 /*
