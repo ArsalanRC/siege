@@ -13,7 +13,7 @@
 
 import { createGame, stepGame, readout, PLUNGER_CHARGE_TIME } from './lib/engine/game.js';
 import { flipperSegment, flipperTip } from './lib/engine/flipper.js';
-import { TABLE_W, TABLE_H, LANE_X, DRAIN_Y, CASTLE_LEFT, CASTLE_RIGHT, CASTLE_TOP, ROOF_FALL } from './lib/engine/table.js';
+import { TABLE_W, TABLE_H, LANE_X, DRAIN_Y, CASTLE_LEFT, CASTLE_RIGHT, CASTLE_TOP, ROOF_FALL, RAIL_IMAGE_TOP, RAIL_IMAGE_H } from './lib/engine/table.js';
 import { applyLanguage, toggleLanguage, currentLanguage, t } from './i18n.js';
 
 const BEST_KEY = 'siege.best';
@@ -349,12 +349,9 @@ function drawHabitrail() {
   // set from the picture instead, which is the right way round: the ball has to
   // roll along the rail the player can see.
   if (art.habitrail) {
-    const w = dx;
-    const h = w * (art.habitrail.naturalHeight / art.habitrail.naturalWidth);
-    // 0.125 is where the top of the upper wire sits down the image. Measured by
-    // scanning the alpha for the first opaque row, not judged by eye: the eyeballed
-    // 0.152 put the ball off the rail.
-    ctx.drawImage(art.habitrail, CASTLE_LEFT, CASTLE_TOP - h * 0.125, w, h);
+    // Same two numbers the collision is built from, so the drawn wire and the
+    // surface the ball rolls on are the same line by construction.
+    ctx.drawImage(art.habitrail, CASTLE_LEFT, RAIL_IMAGE_TOP, CASTLE_RIGHT - CASTLE_LEFT, RAIL_IMAGE_H);
     return;
   }
 

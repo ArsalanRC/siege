@@ -102,6 +102,34 @@ const CASTLE_BOTTOM = 495;
 export const ROOF_FALL = 84;
 
 /**
+ * The habitrail, as the shape it actually is.
+ *
+ * These are the top of the upper wire, measured off `habitrail.png` by scanning
+ * the alpha for the first opaque row at each column. They are fractions of the
+ * image, not units, so the collision and the drawing are computed from the same
+ * seven numbers and cannot drift apart.
+ *
+ * The rail is a CURVE, not a slope. It falls fast at the left and flattens
+ * towards the right, and a straight collider across it left the ball riding off
+ * the drawn wire in the middle. Anything derived from the picture has to be
+ * derived from the whole picture.
+ */
+const RAIL_SAMPLES: ReadonlyArray<readonly [number, number]> = [
+  [0, 0.128], [0.1, 0.167], [0.3, 0.304], [0.5, 0.406],
+  [0.7, 0.488], [0.9, 0.540], [1, 0.565],
+];
+
+/** Where the image's top edge sits, and how tall it is drawn. Shared with the page. */
+export const RAIL_IMAGE_TOP = 74;
+export const RAIL_IMAGE_H = 189;
+
+/** The rail as table coordinates, one point per measured sample. */
+export function railPoints(): Vec[] {
+  return RAIL_SAMPLES.map(([fx, fy]) =>
+    vec(CASTLE_LEFT + fx * (CASTLE_RIGHT - CASTLE_LEFT), RAIL_IMAGE_TOP + fy * RAIL_IMAGE_H));
+}
+
+/**
  * The apex of the painted gable, and it is not decoration.
  *
  * A flat horizontal wall is a permanent ball trap on a table seen from above.
@@ -230,8 +258,8 @@ function castle(): Collider[] {
     // Clearance is 100 units at the left and 160 at the right against a 54 unit
     // ball, and the roof is metal so a crossing ball keeps its speed instead of
     // grinding to a halt between roof and ceiling.
-    segment(vec(CASTLE_LEFT, CASTLE_TOP), vec(CASTLE_LEFT, CASTLE_BOTTOM)),
-    segment(vec(CASTLE_RIGHT, CASTLE_TOP + ROOF_FALL), vec(CASTLE_RIGHT, CASTLE_BOTTOM)),
+    segment(railPoints()[0]!, vec(CASTLE_LEFT, CASTLE_BOTTOM)),
+    segment(railPoints()[RAIL_SAMPLES.length - 1]!, vec(CASTLE_RIGHT, CASTLE_BOTTOM)),
     segment(vec(CASTLE_LEFT, CASTLE_BOTTOM), vec(gateLeft, CASTLE_BOTTOM)),
     segment(vec(gateRight, CASTLE_BOTTOM), vec(CASTLE_RIGHT, CASTLE_BOTTOM)),
   ];
@@ -240,11 +268,8 @@ function castle(): Collider[] {
     // Metal, not wood. On wood at friction 0.14 a ball crossing the corridor
     // arrives with nothing left and dribbles down instead of completing the
     // orbit, which on screen reads as slow motion at the top of the table.
-    ...solid(
-      'castle-roof',
-      [segment(vec(CASTLE_LEFT, CASTLE_TOP), vec(CASTLE_RIGHT, CASTLE_TOP + ROOF_FALL))],
-      RAIL,
-    ),
+    // Traced along the measured wire rather than drawn straight across it.
+    ...solid('castle-roof', polyline(railPoints(), 4), RAIL),
   ];
 }
 
@@ -349,6 +374,16 @@ function lowerWalls(): Collider[] {
   // the bat and the ball parked in it at (729, 1242). Ending above means the
   // wall delivers onto the top of the bat instead, which is the same lesson the
   // lane guides taught three times before they were removed.
+  // A one-ball outlane was tried here and reverted, and the reason is worth
+  // keeping. Leaving 60 units against each wall does open a proper outlane, but
+  // the right orbit delivers the ball down that exact line, so a launched ball
+  // ran straight out of the gap and never reached the table at all. A test
+  // caught it: "never came down into the middle".
+  //
+  // A real machine separates the two with a post between inlane and outlane, so
+  // the orbit is steered inside it and only a ball that has already lost the
+  // rail slips out. That post is the right fix and it is not built yet, so the
+  // edges stay closed until it is.
   const left = segment(vec(PLAY_LEFT, 1175), vec(304, 1235), 8);
   const right = segment(vec(LANE_X, 1175), vec(mx(304), 1235), 8);
   return solid('lower', [left, right], PLASTIC);
