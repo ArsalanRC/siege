@@ -251,3 +251,69 @@ canvas {
     display: flex;
   }
 }
+
+/*
+ * The geometry key.
+ *
+ * Pinned to the left margin, which on this page is a wide strip of empty dark
+ * ground. It is only ever visible while the Geometry overlay is on, so it costs
+ * the normal page nothing, and it is out of the way of the board so it can never
+ * cover the thing it is a legend for.
+ */
+.geokey {
+  position: fixed;
+  left: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgb(255 255 255 / 0.09);
+  border-radius: 0.6rem;
+  background: rgb(12 10 8 / 0.82);
+  font-size: 0.78rem;
+  letter-spacing: 0.01em;
+  color: #d9d2c4;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.geokey[hidden] {
+  display: none;
+}
+
+.geokey b {
+  display: block;
+  margin-bottom: 0.15rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: #8f8676;
+}
+
+.geokey span {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.geokey i {
+  width: 1.6rem;
+  height: 0.28rem;
+  border-radius: 0.14rem;
+  background: currentColor;
+}
+
+.geokey small {
+  margin-top: 0.3rem;
+  color: #8f8676;
+  font-size: 0.7rem;
+}
+
+/* On a narrow screen there is no margin to put it in, so it goes away. */
+@media (max-width: 900px) {
+  .geokey {
+    display: none;
+  }
+}
