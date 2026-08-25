@@ -3,30 +3,42 @@
  *
  * Every wall, post, bumper and lane on the playfield, in the same coordinate
  * space as the art. The table is **1024 by 1536 units**, one unit per pixel of
- * `site/art/playfield.png`, so nothing here ever needs converting to draw.
+ * `site/art/playfield.jpg`, so nothing here ever needs converting to draw.
  *
- * ## These numbers are traced from the art, not invented
+ * ## Every number below was scanned, not judged
  *
- * The first version of this file was written before the playfield existed, from
- * the same description the art was generated from, and every number in it was
- * provisional. The art exists now and these are measured off it.
+ * `tools/measure-art.py` reads the playfield image, classifies each pixel as
+ * bare wood or furniture, and prints the numbers this file imports by hand. Run
+ * it whenever the art changes and paste the output back in. Nothing here was
+ * read off a screenshot by eye, and that rule exists because the last two
+ * geometry bugs on this table were both a number judged from a picture: a roof
+ * slope of 73 against a true 84, and three bumper caps placed up to 123 units
+ * away from the caps they are painted on.
  *
- * That direction matters. The player believes what they can see, so a wall three
+ * The direction matters. The player believes what they can see, so a wall three
  * units from where it is painted reads as a bug in the physics even when the
  * physics is perfect. The art is the specification and the geometry follows it.
  *
- * ## Two things the art decided differently
+ * ## Where the geometry deliberately leaves the art
  *
- * **The painted table is symmetric about x = 512**, the centre of the image,
- * rather than about the centre of the play area. The shooter lane eats into the
- * right hand side, so the left wall sits further from the middle than the lane
- * rail does. Every mirrored pair below is therefore mirrored through
- * `CENTRE_X`, not through the midpoint of the walls.
+ * The painted side lanes are between 12 and 40 units across. A ball is 54. No
+ * ball has ever fitted down any of them, and tracing them faithfully would seal
+ * three quarters of the table off. So a painted lane narrower than a ball is
+ * treated as a **guide drawn on the floor of a wider channel**: the wall goes on
+ * the far side of it, and the ball runs along the painted line rather than
+ * inside it. Every place that happens is marked below.
  *
- * **The castle gate is not on the centre line.** It is painted slightly right
- * of it, at `GATE_CENTRE`. Nudging the collision to 512 to make the code tidier
- * would put the mouth off the arch, and the shot would stop lining up with the
- * thing the player is aiming at.
+ * The same trade is already normal for the bumpers. A real pop bumper's plastic
+ * cap is wider than the skirt the ball actually touches, so a cap painted at
+ * radius 59 colliding at radius 40 is not a compromise, it is the real part.
+ *
+ * ## The art is not symmetric, so nothing here is mirrored
+ *
+ * The painted table is very nearly symmetric and not quite: the lower channel
+ * runs 177 to 816, whose centre is 496.5, while the target bank's centre is 507
+ * and the lamp lenses pair up about 500. Mirroring one side onto the other put
+ * every right hand collider a few units off its paint, which is exactly the
+ * error this file exists to stop. **Both sides are measured separately.**
  *
  * ## Angles
  *
@@ -44,14 +56,20 @@ import { WOOD, METAL, RUBBER, PLASTIC, RAIL } from './physics.js';
 export const TABLE_W = 1024;
 export const TABLE_H = 1536;
 
-/** The shooter lane's inner rail, traced off the painted metal rail. */
-export const LANE_X = 905;
+/**
+ * The shooter lane, measured across the painted rails at y = 700.
+ *
+ * The bright metal inner rail runs 908 to 916 and the outer one 998 to 1010, so
+ * the channel between them is 918 to 994: **76 units** for a 54 unit ball. It
+ * used to be modelled 905 to 1010, which is 105 wide, and a ball fired up a
+ * channel half again wider than the painted one rattles between two rails that
+ * are not where the picture puts them.
+ */
+export const LANE_X = 918;
+export const LANE_OUTER_X = 994;
 
-/** Outer wall on the left, where the painted blue and gold border sits. */
-export const PLAY_LEFT = 18;
-
-/** The art is symmetric about the centre of the image, so mirror through this. */
-export const CENTRE_X = 512;
+/** The painted border's inner edge at the top left corner, before it curves. */
+export const PLAY_LEFT = 55;
 
 /**
  * Past this the ball is gone, and it is below the bottom edge of the board.
@@ -65,11 +83,27 @@ export const CENTRE_X = 512;
  */
 export const DRAIN_Y = 1580;
 
-export const FLIPPER_PIVOT_LEFT: Vec = vec(330, 1258);
-export const FLIPPER_PIVOT_RIGHT: Vec = vec(694, 1258);
+/**
+ * The flippers, centred on the painted channel rather than on the image.
+ *
+ * The lower playfield is painted from 177 to 816, so its centre is 496.5, not
+ * the 512 the image is symmetric about. The pivots used to sit at 330 and 694,
+ * whose centre is 512, which put the right bat 31 units further from its wall
+ * than the left one and made the two outlanes different widths for no reason a
+ * player could see.
+ *
+ * `y` is 1282 rather than 1258 for a measured reason. The left slingshot's lower
+ * post is painted at (288, 1200) with a radius of 13. A pivot at 1258 leaves 35
+ * units between that post and the back of the bat, and 35 is the width that
+ * catches a 54 unit ball: wide enough to roll into, too narrow to roll out of.
+ * It is the third time this table has grown that exact wedge. At 1282 the gap is
+ * 57 and the ball goes through.
+ */
+export const FLIPPER_PIVOT_LEFT: Vec = vec(320, 1282);
+export const FLIPPER_PIVOT_RIGHT: Vec = vec(673, 1282);
 
-/** Where a new ball is parked before the plunger sends it up the lane. */
-export const PLUNGER_REST: Vec = vec(962, 1380);
+/** Where a new ball is parked, on the centre line of the painted lane. */
+export const PLUNGER_REST: Vec = vec(956, 1380);
 
 /** Corner radius on the two top corners of the outer wall. */
 const CORNER_R = 190;
@@ -77,27 +111,43 @@ const CORNER_R = 190;
 /** The ceiling. The castle runs up to meet it, so nothing sits above the castle. */
 const TOP_WALL_Y = 12;
 
-/* The castle, traced off the stonework. */
-export const CASTLE_LEFT = 232;
-export const CASTLE_RIGHT = 800;
-export const CASTLE_TOP = 112;
-const CASTLE_BOTTOM = 495;
+/* ------------------------------------------------------------------ *
+ * Measured off playfield.jpg. See the header, and tools/measure-art.py
+ * ------------------------------------------------------------------ */
 
 /**
- * How far the roof drops from left to right, over 568 units of run.
+ * The castle, from the stonework.
  *
- * Eighty-four, MEASURED off the habitrail image rather than judged by eye.
+ * The left tower runs from 240, the right one ends at 812, and the lower face
+ * where the towers meet the playfield is at 502. Scanned by walking down each
+ * column until the bare wood of the playfield starts.
+ */
+export const CASTLE_LEFT = 240;
+export const CASTLE_RIGHT = 812;
+export const CASTLE_TOP = 112;
+const CASTLE_BOTTOM = 502;
+
+/**
+ * The gate, from the patch of painted landscape you can see through the arch.
  *
- * It was set to 73 by looking at the picture, and 73 against a true 84 puts the
+ * That patch runs 482 to 571, so the mouth is 89 wide and centred on 526.5. The
+ * arch is painted right of the middle of the table and the collision follows it
+ * there: nudging it to 512 to make the code tidier would put the mouth off the
+ * arch and the shot would stop lining up with the thing the player is aiming at.
+ */
+const GATE_CENTRE = 526;
+const GATE_HALF_WIDTH = 44;
+
+/**
+ * How far the roof drops from left to right, over the run of the castle.
+ *
+ * Eighty-four, MEASURED off the habitrail image rather than judged by eye. It
+ * was set to 73 by looking at the picture, and 73 against a true 84 puts the
  * ball eleven units off the drawn rail by the right hand end, which is visible
- * and was reported. Scan the image for the top of the upper wire and fit the
- * slope; do not estimate it. It falls across the
- * castle. The collision follows the art here rather than the other way round,
- * because the ball has to ride on the rail you can see. Eighteen was tried and the ball
- * simply stopped up there: one and a half degrees does not beat the friction of
- * the wood, so it crept along at 5 units a second and never came off. A roof
- * under a ceiling has to shed a slow ball on its own or it is a trap with extra
- * steps.
+ * and was reported. Eighteen was tried and the ball simply stopped up there: one
+ * and a half degrees does not beat the friction of the wood, so it crept along
+ * at 5 units a second and never came off. A roof under a ceiling has to shed a
+ * slow ball on its own or it is a trap with extra steps.
  */
 export const ROOF_FALL = 84;
 
@@ -140,18 +190,190 @@ export function railPoints(): Vec[] {
  *
  * The rule this stands for: **no horizontal surface the ball can land on top
  * of.** Every other level run on this table is a ceiling, struck from
- * underneath, which is safe. The art was prompted with the pitch for the same
- * reason, so the collision and the painting agree.
+ * underneath, which is safe.
  */
 export const CASTLE_ROOF = 45;
 
-/** The arch is painted right of centre, so the collision follows it there. */
-const GATE_CENTRE = 524;
-const GATE_HALF_WIDTH = 48;
+/**
+ * The border down the top left, traced along the inner edge of the painted band.
+ *
+ * Found by walking in from x = 0 on each row: past the strip of wood outside the
+ * border, across the blue and gold band, and stopping at the first wood inside
+ * it. That inner edge is where a ball running the left orbit touches, so it is
+ * where the wall goes.
+ */
+const LEFT_BORDER: ReadonlyArray<readonly [number, number]> = [
+  // The top two points are the one place on this side where the wall sits on the
+  // painted band rather than on its inner edge, and the reason is measured. The
+  // habitrail's left end is at x = 240 and the band's inner edge at that height
+  // is 209, which leaves a **three unit** passage for the ball to come off the
+  // rail into the orbit. It did not: it stopped dead on the end of the rail with
+  // its other side on the border, at (237, 66), in every seeded run. The band is
+  // 85 units wide here, so moving the wall to 180 puts it in the middle of the
+  // painted guide rather than off it, and opens the passage to twenty five.
+  [228, 28], [180, 68], [160, 92],
+  [148, 105], [115, 120], [100, 135],
+  [88, 150], [70, 180], [58, 210], [55, 225], [61, 245], [64, 300],
+  [58, 360], [62, 420], [74, 470],
+];
+
+/**
+ * The main playfield, down its left side, and this is the big correction.
+ *
+ * The bare wood of the lower playfield runs from x = 177 for its whole height
+ * between y = 1080 and y = 1360. The wall was at 18. A hundred and fifty nine
+ * units of painted stonework, a gold rail and a recessed channel sat under the
+ * ball, and every ball that came down that side rolled straight over the top of
+ * a wall the picture plainly shows. It was the single most visible thing wrong
+ * with the table and no test could see it, because the ball was inside the
+ * bounds the whole time.
+ *
+ * Above the flippers the boundary is a curve, not a line: the playfield bulges
+ * out to 105 at y = 880 and pulls back in to 177 by y = 1010. These points are
+ * the measured edge, one per place it changes direction.
+ */
+const LEFT_WALL: ReadonlyArray<readonly [number, number]> = [
+  // The floor of the bumper pocket, falling right at eleven degrees so a ball
+  // that has finished with the bumpers rolls out of them instead of settling.
+  // Below y = 470 the painted band is buried under the caps and the scoop, so
+  // there is nothing left to trace and this is the line that carries the orbit
+  // round into the playfield.
+  [160, 494], [250, 510], [292, 520], [278, 600],
+  // The scoop mouth interrupts the wall here. See scoops().
+  [248, 700], [229, 760], [198, 776], [164, 792], [136, 816],
+  [105, 872], [105, 884], [118, 912], [129, 944], [151, 984],
+  [173, 1000], [180, 1020], [177, 1080], [177, 1360],
+];
+
+/** The same scan down the right side. Not a mirror of the left: measured. */
+const RIGHT_WALL: ReadonlyArray<readonly [number, number]> = [
+  [745, 588], [745, 616], [756, 624],
+  // The scoop mouth interrupts the wall here too.
+  [770, 700], [760, 744], [768, 760], [794, 776], [800, 792],
+  [846, 808], [865, 840], [870, 880], [858, 920], [851, 944],
+  [826, 976], [806, 1000], [805, 1030], [816, 1080], [816, 1360],
+];
+
+/**
+ * The apron, where the painted playfield funnels down to the outhole.
+ *
+ * Both sides converge on a mouth about 200 units wide at y = 1504, which is the
+ * bottom edge of the picture. The ball keeps falling past it to `DRAIN_Y` so you
+ * watch it go rather than watching it vanish.
+ */
+const APRON_LEFT: ReadonlyArray<readonly [number, number]> = [
+  [177, 1360], [208, 1400], [265, 1432], [322, 1464], [397, 1504], [397, DRAIN_Y],
+];
+const APRON_RIGHT: ReadonlyArray<readonly [number, number]> = [
+  [816, 1360], [787, 1400], [738, 1432], [685, 1456], [599, 1504], [599, DRAIN_Y],
+];
+
+/**
+ * The three pop bumper caps, from a gradient circle fit on the painted rings.
+ *
+ * Centres (146, 213), (253, 345) and (103, 407), each ring about 59 units
+ * across. The colliders used to sit at (122, 200), (130, 320) and (118, 440).
+ * The middle one was **123 units** from the cap it is painted on, which put a
+ * live bumper in the middle of bare wood and left the painted cap dead. That is
+ * the defect in the overlay screenshot: a green circle floating on the boards.
+ */
+const BUMPER_CAPS: ReadonlyArray<readonly [number, number]> = [
+  [146, 213], [253, 345], [103, 407],
+];
+
+/**
+ * Collide at 40 against a painted 59, and the reason is the left orbit.
+ *
+ * Between the border at 58 and the castle at 246 the orbit is 188 units across
+ * at the height of the first cap. At the painted 59 the cap leaves 29 on one
+ * side and 41 on the other, so no ball ever went down the left half of the
+ * table. At 40 it leaves 48 and 60. Forty-eight is still under a ball, so the
+ * ball takes the inside line past every cap, which is exactly what it does on a
+ * real machine and what the painted lane guide is drawn to encourage.
+ */
+const BUMPER_RADIUS = 36;
+
+/**
+ * The three ogre shields, measured off the green panels.
+ *
+ * They span 323 to 439, 450 to 565 and 576 to 690, from y = 526 down to y = 737.
+ * The collider goes on the **lower** edge, because that is the face of the panel
+ * the ball arrives at. It used to sit at y = 545, twenty units below the top of
+ * a panel 211 tall, so a ball could travel two hundred units up the middle of a
+ * painted shield before anything stopped it.
+ *
+ * The gaps between panels are 11 units, which no ball can enter, so each target
+ * is extended to the middle of its gap and the bank reads as one bar with three
+ * pieces rather than three bars with two slots.
+ */
+const TARGET_Y = 737;
+const TARGET_SPANS: ReadonlyArray<readonly [number, number]> = [
+  [323, 444], [444, 570], [570, 690],
+];
+
+/**
+ * The slingshots, from the three gold posts at the corners of each triangle.
+ *
+ * The whole triangle is solid now. Only one edge used to be, traced short and in
+ * the wrong place: the old left segment ran (205, 1075) to (270, 1145) against a
+ * painted triangle whose corners are (216, 1068), (201, 1169) and (288, 1200).
+ *
+ * The long edge is the one facing the middle of the table, and it carries the
+ * kick. The other two are plain rubber. The outer edge is 12 units from the
+ * wall, which is closer than a ball can reach, so nothing can get behind it.
+ */
+const SLING_LEFT: ReadonlyArray<readonly [number, number]> = [
+  [216, 1068], [201, 1169], [288, 1200],
+];
+const SLING_RIGHT: ReadonlyArray<readonly [number, number]> = [
+  [773, 1072], [787, 1170], [701, 1201],
+];
+
+/**
+ * The painted lamp lenses, as rollovers rather than as posts.
+ *
+ * Fourteen domed jewels in gold bezels, each about 50 units across, measured as
+ * islands of furniture inside the bare wood. There used to be seven solid posts
+ * scattered through the middle of the table on nothing at all, and three of the
+ * lenses they were meant to be sitting on run straight down the centre line at
+ * (501, 1100), (500, 1170) and (500, 1241): a solid post at the last of those
+ * would stand in the mouth of the drain.
+ *
+ * So they are lamps, which is what a lens flush with the playfield is on a real
+ * machine, and the ball rolls over them and lights them. That is worth more than
+ * the posts were: it puts something to collect in the empty middle of the table
+ * without putting anything invisible in the ball's way.
+ */
+const LAMPS: ReadonlyArray<readonly [number, number]> = [
+  [232, 826], [422, 761], [575, 763], [734, 669], [765, 823],
+  [153, 890], [818, 897], [304, 1019], [698, 1019],
+  [398, 1120], [604, 1120],
+  [501, 1100], [500, 1170], [500, 1241],
+];
+const LAMP_RADIUS = 26;
+
+/**
+ * The two scoops, from the painted red lanes.
+ *
+ * A principal axis fit on the crimson gives the left lane as (219, 509) to
+ * (163, 697) and the right as (817, 516) to (853, 715), each about 72 across.
+ * The gold arrow inside each one points up the lane, which is the shot.
+ *
+ * They used to be a single sloped wall apiece, and both slopes ran the wrong
+ * way. The left collider fell to the right going down where the painted lane
+ * falls to the left, so the ball turned the opposite way to the thing it looked
+ * like it hit.
+ */
+const SCOOP_LEFT_CENTRE: Vec = vec(208, 636);
+const SCOOP_RIGHT_CENTRE: Vec = vec(818, 640);
+const SCOOP_R = 46;
 
 /** How much extra speed each thing throws the ball with, in units per second. */
 const BUMPER_KICK = 1450;
 const SLING_KICK = 1150;
+
+/** A scoop lets go hard. This is a coil, not a bounce. */
+export const SCOOP_KICK = 3000;
 
 let nextId = 0;
 function id(prefix: string): string {
@@ -159,9 +381,8 @@ function id(prefix: string): string {
   return `${prefix}-${nextId}`;
 }
 
-/** Mirror an x coordinate through the painted centre line. */
-function mx(x: number): number {
-  return CENTRE_X * 2 - x;
+function pts(list: ReadonlyArray<readonly [number, number]>): Vec[] {
+  return list.map(([x, y]) => vec(x, y));
 }
 
 function solid(prefix: string, segs: Segment[], material: Material, kick = 0): Collider[] {
@@ -200,26 +421,93 @@ function sensor(name: string, segs: Segment[]): Collider[] {
   }));
 }
 
-/**
- * The outer wall: two straight sides, two rounded top corners, a flat top.
- *
- * It stops short of the bottom on both sides, because the bottom of a pinball
- * table is not a wall. It is the drain, and leaving it open is the game.
- */
-function outerWalls(): Collider[] {
-  const right = TABLE_W - 14;
-  const segs: Segment[] = [
-    segment(vec(PLAY_LEFT, DRAIN_Y), vec(PLAY_LEFT, CORNER_R)),
-    ...arcToSegments(vec(PLAY_LEFT + CORNER_R, CORNER_R), CORNER_R, Math.PI, Math.PI * 1.5, 16),
-    segment(vec(PLAY_LEFT + CORNER_R, TOP_WALL_Y), vec(right - CORNER_R, TOP_WALL_Y)),
-    ...arcToSegments(vec(right - CORNER_R, CORNER_R), CORNER_R, Math.PI * 1.5, Math.PI * 2, 16),
-    segment(vec(right, CORNER_R), vec(right, DRAIN_Y)),
-  ];
-  return solid('wall', segs, WOOD);
+function sensorCircle(name: string, c: Vec, radius: number): Collider {
+  return {
+    id: name,
+    type: 'circle',
+    circle: { c, radius },
+    material: WOOD,
+    kick: 0,
+    sensor: true,
+    active: true,
+  };
 }
 
 /**
- * The shooter lane, up the right hand edge.
+ * The whole left hand side of the table, as one unbroken wall.
+ *
+ * It starts at the top left corner on the measured border, runs down past the
+ * bumpers, turns right along the floor of the pocket, and carries straight on
+ * into the left wall of the main playfield and then the apron. One polyline,
+ * because that is what it is on a real machine: a ball never crosses it, it
+ * follows it all the way down.
+ *
+ * Building it as separate pieces was the mistake in the first pass. Two walls
+ * that nearly meet leave a notch, and this table has already produced five
+ * separate ball traps out of notches exactly like that one.
+ *
+ * The only break in it is the scoop mouth, and that break is bounded by the two
+ * ends of the scoop chamber's own arc, so there is no free end anywhere.
+ */
+function leftWall(): Collider[] {
+  const chain = [...pts(LEFT_BORDER), ...pts(LEFT_WALL)];
+  const lips = scoopLips();
+  const breakAt = LEFT_BORDER.length + 3;
+  return solid('wall', [
+    ...polyline([...chain.slice(0, breakAt), lips.leftUpper]),
+    ...polyline([lips.leftLower, ...chain.slice(breakAt)]),
+    ...polyline(pts(APRON_LEFT)),
+  ], WOOD);
+}
+
+/**
+ * The right hand side: the ceiling, the outer rail, and the orbit's way home.
+ *
+ * The **orbit return** is the piece that was missing, and its absence was a real
+ * trap rather than a cosmetic one. The right orbit runs down between the castle
+ * at 812 and the shooter lane rail at 918, and below the castle the painted
+ * playfield pulls left to 745 before bulging back out to 870. That leaves a
+ * channel outside the playfield that closes to **48 units** against a 54 unit
+ * ball. A launched ball came down the orbit, went outside the playfield, and
+ * jammed at (891, 876) with nothing on screen to explain it. The test caught it
+ * in one run and no screenshot ever would have.
+ *
+ * So the orbit ends in a wall that slopes down and left across to the top of the
+ * playfield's right side, and hands the ball to the table. The dead channel
+ * behind it is sealed on every side and no ball can reach it now.
+ */
+function rightWall(): Collider[] {
+  const right = LANE_OUTER_X;
+  const chain = pts(RIGHT_WALL);
+  const lips = scoopLips();
+  const top = pts(LEFT_BORDER)[0]!;
+  const segs: Segment[] = [
+    segment(top, vec(right - CORNER_R, TOP_WALL_Y)),
+    ...arcToSegments(vec(right - CORNER_R, CORNER_R), CORNER_R, Math.PI * 1.5, Math.PI * 2, 16),
+    segment(vec(right, CORNER_R), vec(right, DRAIN_Y)),
+    ...polyline([...chain.slice(0, 3), lips.rightUpper]),
+    ...polyline([lips.rightLower, ...chain.slice(3)]),
+    ...polyline(pts(APRON_RIGHT)),
+  ];
+  return [
+    ...solid('wall', segs, WOOD),
+    // The orbit return, joining the lane rail to the top of the playfield. It
+    // gets its own id so the page can draw it, because it is a rail the art does
+    // not paint and an invisible wall on this table has been reported before:
+    // "some transparent railing where the 2 levers are".
+    //
+    // It passes 70 units under the castle's lower right corner, and that number
+    // is the whole reason it sits where it does. At 520 it passed 42 under the
+    // corner, and 42 is less than a ball: the ball perched on the corner with
+    // the return wall just too far below to touch, at (838, 511), and stayed
+    // there. A corner sticking out into a lane needs either a ball's clearance
+    // under it or none at all.
+    ...solid('orbit', [segment(vec(LANE_X, 548), chain[0]!, 5)], RAIL),
+  ];
+}
+
+/**
+ * The shooter lane, up the right hand edge, between the two painted rails.
  *
  * The rail stops at `laneTop` so the ball is thrown out into the horseshoe at
  * the top. The one-way gate that stops it dribbling back down is not here: it
@@ -246,21 +534,24 @@ function castle(): Collider[] {
   const gateRight = GATE_CENTRE + GATE_HALF_WIDTH;
   const segs: Segment[] = [
     // The corridor over the castle is open, and this time there is a habitrail
-    // drawn on it.
-    //
-    // It was open once before and Arsalan rejected it on sight: the ball
-    // travelled over the painted towers with nothing underneath it and looked
-    // like it was flying. Sealing it was the wrong fix, because it left the
-    // left half of the table unreachable. The right fix is the one a real
+    // drawn on it. It was open once before and Arsalan rejected it on sight: the
+    // ball travelled over the painted towers with nothing underneath it and
+    // looked like it was flying. Sealing it was the wrong fix, because it left
+    // the left half of the table unreachable. The right fix is the one a real
     // machine uses: a raised wire rail, drawn, so a ball above the playfield
     // furniture reads as being on a rail rather than as a bug.
-    //
-    // Clearance is 100 units at the left and 160 at the right against a 54 unit
-    // ball, and the roof is metal so a crossing ball keeps its speed instead of
-    // grinding to a halt between roof and ceiling.
-    segment(railPoints()[0]!, vec(CASTLE_LEFT, CASTLE_BOTTOM)),
+    // The left face is not a straight drop, and treating it as one sealed the
+    // table. The painted tower stands at x = 240 down to about y = 395, and
+    // below that it narrows into a rocky base that pulls right: bare wood
+    // reaches 291 at y = 330 and 318 at y = 435, and the neck the ball comes
+    // down runs between the scoop structure at 270 and the castle's base at 325.
+    // A vertical wall at 240 all the way down therefore ran straight across the
+    // floor of the bumper pocket, and a ball that had finished with the bumpers
+    // rolled right along that floor into it and stopped at (213, 476). There was
+    // no way out of the top left of the table at all.
+    ...polyline([railPoints()[0]!, vec(CASTLE_LEFT, 395), vec(365, 500)]),
     segment(railPoints()[RAIL_SAMPLES.length - 1]!, vec(CASTLE_RIGHT, CASTLE_BOTTOM)),
-    segment(vec(CASTLE_LEFT, CASTLE_BOTTOM), vec(gateLeft, CASTLE_BOTTOM)),
+    segment(vec(365, 500), vec(gateLeft, CASTLE_BOTTOM)),
     segment(vec(gateRight, CASTLE_BOTTOM), vec(CASTLE_RIGHT, CASTLE_BOTTOM)),
   ];
   return [
@@ -278,9 +569,21 @@ function castleChamber(): Collider[] {
   const gateLeft = GATE_CENTRE - GATE_HALF_WIDTH;
   const gateRight = GATE_CENTRE + GATE_HALF_WIDTH;
   return [
+    // A back wall AND two sides. The sides are the fix for a real trap: with
+    // only the back wall, a ball that took an open gate carried on past the
+    // chamber into the whole hollow inside of the castle, rolled right, and came
+    // to rest on the castle's own lower face at (674, 475). That face is level,
+    // and a level surface the ball can land on top of is a permanent trap on a
+    // table seen from above. Now the mouth leads to a chamber the width of the
+    // gate, the ball stops on the back wall and falls straight back out of the
+    // hole it came in by.
     ...solid(
       'castle-back',
-      [segment(vec(gateLeft, CASTLE_BOTTOM - 210), vec(gateRight, CASTLE_BOTTOM - 210))],
+      [
+        segment(vec(gateLeft, CASTLE_BOTTOM - 210), vec(gateRight, CASTLE_BOTTOM - 210)),
+        segment(vec(gateLeft, CASTLE_BOTTOM - 210), vec(gateLeft, CASTLE_BOTTOM)),
+        segment(vec(gateRight, CASTLE_BOTTOM - 210), vec(gateRight, CASTLE_BOTTOM)),
+      ],
       WOOD,
     ),
     ...sensor('gate', [
@@ -314,154 +617,92 @@ function portcullis(): Collider {
 }
 
 /**
- * Three pop bumpers in the upper left, traced onto the painted shield caps.
+ * Three pop bumpers in the upper left, on the caps they are painted on.
  *
  * They carry a `kick` rather than a high restitution because restitution can
  * only ever hand back a fraction of what arrived. A ball that dribbles in with
  * almost no speed would leave with less, and would sit among them forever.
  */
 function bumpers(): Collider[] {
-  // Radius 42, not the 78 the painted shield caps measure.
-  //
-  // The left orbit is 214 units wide, between the outer wall and the castle. A
-  // ball is 54. At radius 78 every bumper left under 54 on both sides, so the
-  // left half of the table was sealed off and no ball ever went down it. The
-  // caps are still painted at their full size, which is normal: on a real
-  // machine the plastic cap is wider than the skirt the ball actually hits.
-  //
-  // At 42 each of these leaves about 60 units clear on either side, so the ball
-  // weaves past them instead of being stopped by them.
-  return [
-    post('bumper', vec(122, 200), 42, RUBBER, BUMPER_KICK),
-    post('bumper', vec(130, 320), 42, RUBBER, BUMPER_KICK),
-    post('bumper', vec(118, 440), 42, RUBBER, BUMPER_KICK),
-  ];
+  return BUMPER_CAPS.map(([x, y]) => post('bumper', vec(x, y), BUMPER_RADIUS, RUBBER, BUMPER_KICK));
 }
 
 /**
- * The two ramp structures, as plain deflectors.
+ * The lane guide on each side, and the post that makes an outlane out of it.
  *
- * They are painted as raised ramps with arrows, and a real one would carry the
- * ball up and over. That is a second elevation and a whole extra mode of
- * travel, so for now they are solid angled walls: the ball cannot pass through
- * something drawn as solid, which is the part that would look broken.
+ * Arsalan asked for a one ball outlane on each side. It was tried once by
+ * pulling the lower walls 60 units off each wall and reverted, because the right
+ * orbit delivers the ball down that exact line and a launched ball ran straight
+ * out of the gap without ever reaching the table. What a real machine puts there
+ * is a post between the inlane and the outlane, so the orbit is steered inside
+ * it and only a ball that has already lost the line slips out. That is what this
+ * is.
+ *
+ * The outlane could not go where a real machine puts it, and the measurement is
+ * why. The painted wall on the left is at 177 and the painted slingshot starts
+ * at 189, so there are **12 units** between them: there is no room beside the
+ * slingshot for a lane of any width at all. So the split happens below the
+ * slingshot instead. The rail runs down from the post to the flipper pivot, the
+ * outlane is the channel outside it, and the inlane is the channel inside.
+ *
+ * Every number here is a clearance, not a preference:
+ *
+ * - outlane 177 to 234, which is **57** for a 54 unit ball
+ * - the rail is 6 thick, so 234 to 246
+ * - inlane 246 to 304, the back of the bat, which is **58**
+ * - the post is 68 clear of the slingshot's lower corner, so a ball chooses a
+ *   side rather than wedging between them
+ *
+ * They only just fit. The whole budget from the wall to the back of the bat is
+ * 127 units and two lanes and a rail need 121 of it.
  */
-/**
- * The lower walls, converging towards the flippers.
- *
- * Below the slingshots the table used to be open for its whole 887 unit width,
- * so a ball had far more ways to be lost than to be saved and a game lasted a
- * few seconds. These bring each side in to about 60 units of outlane beside the
- * flipper, which is a gap a ball fits through but only when it is genuinely
- * beaten, rather than a pair of open doors.
- *
- * They replace the orbit deflectors, which did the same steering job less well
- * and met the old outer wall at an angle that made a corner.
- */
-function lowerWalls(): Collider[] {
-  // Both start BELOW the slingshots, not beside them. Starting at y=1000 put
-  // the right hand wall 28 units from the right slingshot, and 28 is a gap a
-  // 54 unit ball can reach into and not fit through.
-  // They end close enough to the flipper pivots to CLOSE the outlanes rather
-  // than merely narrow them: about 24 units of gap, which a 54 unit ball cannot
-  // get through. That is deliberate. With the outlanes open a ball was lost in
-  // one to five seconds and the game was miserable, and an outlane drain is the
-  // least interesting way to lose anyway. The centre drain between the flipper
-  // tips is still 104 units wide, so there is still a real way to lose, and it
-  // is the one the player can actually do something about.
-  // Each ends ABOVE its flipper pivot, never below it. Ending at y=1290, under
-  // the pivots at 1258, made a V between the wall's end and the rounded back of
-  // the bat and the ball parked in it at (729, 1242). Ending above means the
-  // wall delivers onto the top of the bat instead, which is the same lesson the
-  // lane guides taught three times before they were removed.
-  // A one-ball outlane was tried here and reverted, and the reason is worth
-  // keeping. Leaving 60 units against each wall does open a proper outlane, but
-  // the right orbit delivers the ball down that exact line, so a launched ball
-  // ran straight out of the gap and never reached the table at all. A test
-  // caught it: "never came down into the middle".
-  //
-  // A real machine separates the two with a post between inlane and outlane, so
-  // the orbit is steered inside it and only a ball that has already lost the
-  // rail slips out. That post is the right fix and it is not built yet, so the
-  // edges stay closed until it is.
-  const left = segment(vec(PLAY_LEFT, 1175), vec(304, 1235), 8);
-  const right = segment(vec(LANE_X, 1175), vec(mx(304), 1235), 8);
-  return solid('lower', [left, right], PLASTIC);
+function laneGuides(): Collider[] {
+  const out: Collider[] = [];
+  for (const side of [
+    { top: vec(246, 1266), foot: vec(306, 1276), postAt: vec(246, 1266) },
+    { top: vec(747, 1266), foot: vec(687, 1276), postAt: vec(747, 1266) },
+  ]) {
+    out.push(...solid('lower', [segment(side.top, side.foot, 6)], PLASTIC));
+    // A round cap on the top end, which is the inlane/outlane post itself. A
+    // bare segment end is a corner, and a corner beside a lane is how the last
+    // three wedges on this table started.
+    out.push(post('lower-post', side.postAt, 12, RUBBER, 220));
+  }
+  return out;
 }
 
 /**
  * Slingshots: the two triangular rubbers above the flippers.
  *
- * Only the inward face is modelled, traced along the painted red band. The back
- * of a slingshot is buried in the lane guide and no ball reaches it, so giving
- * it geometry would cost collision checks every substep to guard a place the
- * ball cannot be.
+ * Solid all the way round, on the three painted posts. The long edge faces the
+ * middle of the table and carries the kick; the other two are plain rubber, so a
+ * ball that comes down the outside is turned rather than fired.
  */
 function slingshots(): Collider[] {
-  // The slingshot sits entirely ABOVE the inlane and does not reach down into
-  // it. The first tracing ran the tip to (292, 1192), which left 45.7 units of
-  // clearance to the lane guide for a 54 unit ball. The ball could enter that
-  // pocket and then not fit through it, so it stopped there and the game was
-  // over without ever ending.
-  //
-  // The thinner radius is part of the same fix: the slingshot and the guide
-  // both have to funnel towards the same flipper, so they converge, and every
-  // unit of padding on either one comes straight out of the gap between them.
-  const left = segment(vec(205, 1075), vec(270, 1145), 7);
-  const right = segment(vec(mx(205), 1075), vec(mx(270), 1145), 7);
-  return solid('sling', [left, right], RUBBER, SLING_KICK);
+  const out: Collider[] = [];
+  for (const tri of [SLING_LEFT, SLING_RIGHT]) {
+    const [a, b, c] = pts(tri) as [Vec, Vec, Vec];
+    // a is the top post, c is the one nearest the middle of the table, so a..c
+    // is the face a ball arriving from the playfield actually meets.
+    out.push(...solid('sling', [segment(a, c, 9)], RUBBER, SLING_KICK));
+    // Named so they do NOT share the `sling-` prefix. Scoring and the clearance
+    // test both key off that prefix, and a back edge that scored as a slingshot
+    // would pay the player for a ball rolling down the outside of it.
+    out.push(...solid('triangle', [segment(a, b, 9), segment(b, c, 9)], RUBBER));
+  }
+  return out;
 }
 
 /**
- * The lane guides that split each side into an inlane and an outlane.
- *
- * The inlane, on the inside, feeds the flipper. The outlane, hugging the wall,
- * drains. A guide that ends level with the flipper pivot delivers the ball onto
- * the base of the bat; ending it lower would drop the ball past the flipper
- * entirely, which reads as the table cheating.
- */
-/*
- * There are no lane guides, and removing them was the fix rather than a
- * simplification I got away with.
- *
- * A guide splits each side into an inlane and an outlane, which is how a real
- * machine is built. The trouble is that the guide and the slingshot above it
- * both have to funnel towards the same flipper, so the channel between them
- * narrows, and anywhere it narrows below 54 units the ball can enter and then
- * not fit. That produced three separate traps in a row:
- *
- * 1. Ball pinched between the slingshot tip and the guide, at (716, 1223).
- * 2. Moved the guide, and it wedged between the guide and the back of the
- *    flipper instead, at (731, 1245).
- * 3. Straightened the guide and ended it above the pivot, and it wedged
- *    against the guide's own end cap, at (709, 1222).
- *
- * Each fix moved the pinch rather than removing it, because the convergence is
- * inherent to the shape. Without the guides the lower playfield is simply open:
- * the ball falls to the flippers or it drains down the side, which is what the
- * outlanes did anyway. The scoring sensors stay, so the game still knows which
- * side a ball went down.
- *
- * If guides ever come back, they need a channel of constant width that is
- * comfortably wider than a ball for its whole length, not two lines that meet.
- */
-
-/**
- * Three drop targets, traced onto the painted ogre shields.
+ * Three drop targets, on the lower edge of the painted ogre shields.
  *
  * Knocking all three down is what opens the castle gate.
  */
 function dropTargets(): Collider[] {
-  const y = 545;
-  const spans: Array<[number, number]> = [
-    [330, 425],
-    [455, 550],
-    [580, 675],
-  ];
-  return spans.map(([x0, x1], i) => ({
+  return TARGET_SPANS.map(([x0, x1], i) => ({
     id: `target-${i}`,
     type: 'segment' as const,
-    seg: segment(vec(x0, y), vec(x1, y), 10),
+    seg: segment(vec(x0, TARGET_Y), vec(x1, TARGET_Y), 10),
     material: PLASTIC,
     kick: 0,
     sensor: false,
@@ -469,60 +710,100 @@ function dropTargets(): Collider[] {
   }));
 }
 
-/**
- * The two painted ramp entrances, as their inner edges only.
- *
- * The art puts a raised red ramp with a gold arrow on each side, and until now
- * nothing was there at all: the ball fell straight through them, which looks
- * broken because the picture plainly shows something solid.
- *
- * Only the inner edge is modelled, and that is forced. The painted right ramp
- * runs from 760 to 860 across an orbit that is 800 to 905, so making the whole
- * shape solid leaves 45 units for a 54 unit ball and seals the right orbit
- * completely. Modelling the inner edge gives the ball something to hit from the
- * middle of the table, where it is visible and useful, while the orbit still
- * runs behind it.
- *
- * They start below the castle so there is no corner where the two meet.
- */
-function ramps(): Collider[] {
-  const left = segment(vec(250, 560), vec(268, 720), 10);
-  const right = segment(vec(mx(250), 560), vec(mx(268), 720), 10);
-  return solid('ramp', [left, right], PLASTIC, 260);
+/** The two ends of the arc each scoop chamber leaves open to the playfield. */
+function scoopLips(): {
+  leftUpper: Vec; leftLower: Vec; rightUpper: Vec; rightLower: Vec;
+} {
+  const at = (c: Vec, deg: number): Vec =>
+    vec(c.x + Math.cos((deg * Math.PI) / 180) * SCOOP_R, c.y + Math.sin((deg * Math.PI) / 180) * SCOOP_R);
+  return {
+    leftUpper: at(SCOOP_LEFT_CENTRE, -24),
+    leftLower: at(SCOOP_LEFT_CENTRE, 76),
+    rightUpper: at(SCOOP_RIGHT_CENTRE, 204),
+    rightLower: at(SCOOP_RIGHT_CENTRE, 104),
+  };
 }
 
 /**
- * Small posts through the middle of the table, on the painted lamp lenses.
+ * The two scoops: a round chamber behind a gap in the wall.
  *
- * Chasing wedges took out the lane guides and the ramp structures, and between
- * the targets at 545 and the slingshots at 1075 that left five hundred units of
- * bare wood with nothing in it. The table was playable and dull: a ball lasted
- * thirty seconds and scored two hundred, because it spent its life falling
- * through empty space.
+ * A hole in a pinball table is a chamber the ball cannot get out of by itself,
+ * and that is the one shape this table has spent thirteen bugs learning to
+ * avoid. It is safe here for one reason only: **the scoop always lets go.** The
+ * hold is on a timer in `game.ts`, not on the player doing something, so a ball
+ * in here is never a ball that has stopped.
  *
- * These are round, isolated and far apart, which is the shape that cannot trap.
- * A wedge needs two surfaces converging on a gap narrower than a ball, and
- * single posts with a hundred units of clear air around them never make one.
- * The small kick keeps a tiring ball moving instead of letting it die in the
- * middle of the table.
+ * The chamber is a circle of 46 with a 100 degree bite taken out of it facing
+ * the playfield. The opening between the two lips is 71 units across, so a 54
+ * unit ball goes in cleanly, and the wall runs into those same two lips so there
+ * is no step where they meet.
  */
-function posts(): Collider[] {
-  const at: Array<[number, number]> = [
-    [300, 800], [724, 800],
-    [512, 890],
-    [400, 980], [624, 980],
-    [286, 1030], [738, 1030],
+function scoops(): Collider[] {
+  const rad = (deg: number) => (deg * Math.PI) / 180;
+  return [
+    // The left chamber is open from -24 to 76 degrees, so its wall is the rest.
+    ...solid('scoopwall', arcToSegments(SCOOP_LEFT_CENTRE, SCOOP_R, rad(76), rad(336), 20), PLASTIC),
+    // The right one is open from 104 to 204, so its wall runs the other way round.
+    ...solid('scoopwall', arcToSegments(SCOOP_RIGHT_CENTRE, SCOOP_R, rad(204), rad(464), 20), PLASTIC),
+    // The catch itself is a sensor at the back of each chamber, not the wall. A
+    // ball that merely clips the mouth on its way past is not caught; it has to
+    // get far enough in that the picture agrees it went in.
+    sensorCircle('scoop-left', SCOOP_LEFT_CENTRE, 20),
+    sensorCircle('scoop-right', SCOOP_RIGHT_CENTRE, 20),
   ];
-  return at.map(([x, y]) => post('post', vec(x, y), 16, RUBBER, 190));
+}
+
+/** The painted lamp lenses, as rollovers the ball lights by passing over them. */
+function lamps(): Collider[] {
+  return LAMPS.map(([x, y], i) => sensorCircle(`lamp-${i}`, vec(x, y), LAMP_RADIUS));
 }
 
 /** Sensors across each inlane and outlane, so the game knows where a ball went. */
 function laneSensors(): Collider[] {
   return [
-    ...sensor('outlane-left', [segment(vec(PLAY_LEFT, 1300), vec(150, 1300))]),
-    ...sensor('inlane-left', [segment(vec(232, 1300), vec(310, 1300))]),
-    ...sensor('outlane-right', [segment(vec(mx(PLAY_LEFT), 1300), vec(mx(150), 1300))]),
-    ...sensor('inlane-right', [segment(vec(mx(232), 1300), vec(mx(310), 1300))]),
+    // The outlane sensor sits in the channel between the wall and the post, which
+    // is 177 to 234 on the left and 759 to 816 on the right. The inlane one sits
+    // where a ball rolling down the guide rail actually is, which is a ball's
+    // radius plus the rail's above the rail itself, not level with it.
+    ...sensor('outlane-left', [segment(vec(180, 1330), vec(232, 1330))]),
+    ...sensor('inlane-left', [segment(vec(252, 1234), vec(300, 1242))]),
+    ...sensor('outlane-right', [segment(vec(761, 1330), vec(813, 1330))]),
+    ...sensor('inlane-right', [segment(vec(693, 1242), vec(741, 1234))]),
+  ];
+}
+
+/**
+ * A scoop, as the game needs to see it.
+ *
+ * `hold` is where the ball is parked while it is caught, which is inside the
+ * painted lane so the picture explains what happened to it. `eject` is a unit
+ * vector from the hold point out through the middle of the mouth, so the ball
+ * always leaves through the gap rather than into the side of its own chamber.
+ */
+export interface Scoop {
+  readonly id: string;
+  readonly centre: Vec;
+  readonly radius: number;
+  readonly hold: Vec;
+  readonly eject: Vec;
+  readonly mouth: Vec;
+}
+
+function scoopList(): Scoop[] {
+  const lips = scoopLips();
+  const build = (name: string, centre: Vec, a: Vec, b: Vec): Scoop => {
+    const mouth = vec((a.x + b.x) / 2, (a.y + b.y) / 2);
+    // Park it a little behind the middle, so the ball sits in the chamber rather
+    // than in its doorway.
+    const hold = vec(centre.x + (centre.x - mouth.x) * 0.2, centre.y + (centre.y - mouth.y) * 0.2);
+    const dx = mouth.x - hold.x;
+    const dy = mouth.y - hold.y;
+    const d = Math.hypot(dx, dy) || 1;
+    return { id: name, centre, radius: SCOOP_R, hold, eject: vec(dx / d, dy / d), mouth };
+  };
+  return [
+    build('scoop-left', SCOOP_LEFT_CENTRE, lips.leftUpper, lips.leftLower),
+    build('scoop-right', SCOOP_RIGHT_CENTRE, lips.rightUpper, lips.rightLower),
   ];
 }
 
@@ -533,6 +814,8 @@ export interface Table {
   /** The castle mouth. Solid until all three targets are down. */
   readonly portcullis: Collider;
   readonly targets: Collider[];
+  /** The two holes. The game owns the hold timer; the table owns the geometry. */
+  readonly scoops: Scoop[];
 }
 
 /**
@@ -549,14 +832,14 @@ export function buildTable(): Table {
   const laneGate: Collider = {
     id: 'lane-gate',
     type: 'segment',
-    // Reaches the right wall, and slopes down towards the playfield.
+    // Reaches the outer wall, and slopes down towards the playfield.
     //
     // It used to stop 58 units short, which left a 41 unit notch against the
     // wall that a 54 unit ball could not pass but could rest in, so the ball
     // parked at (983, 242) every strong launch. Meeting the wall removes the
     // notch, and the downhill run means a ball that settles on the gate rolls
     // off its low end and onto the table rather than staying there.
-    seg: segment(vec(TABLE_W - 14, 262), vec(LANE_X, 300), 6),
+    seg: segment(vec(LANE_OUTER_X, 262), vec(LANE_X, 300), 6),
     material: METAL,
     kick: 0,
     sensor: false,
@@ -567,20 +850,21 @@ export function buildTable(): Table {
   const gate = portcullis();
 
   const colliders: Collider[] = [
-    ...outerWalls(),
+    ...leftWall(),
+    ...rightWall(),
     ...shooterLane(),
     laneGate,
     ...castle(),
     ...castleChamber(),
     gate,
     ...bumpers(),
-    ...lowerWalls(),
+    ...scoops(),
+    ...laneGuides(),
     ...slingshots(),
-    ...ramps(),
-    ...posts(),
     ...targets,
+    ...lamps(),
     ...laneSensors(),
   ];
 
-  return { colliders, laneGate, portcullis: gate, targets };
+  return { colliders, laneGate, portcullis: gate, targets, scoops: scoopList() };
 }

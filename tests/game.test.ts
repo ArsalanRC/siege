@@ -8,6 +8,7 @@ import { TABLE_W, TABLE_H, DRAIN_Y, LANE_X } from '../src/engine/table.js';
 const BELOW_BOARD = DRAIN_Y + 120;
 import { BALL_RADIUS } from '../src/engine/physics.js';
 import { vec } from '../src/engine/vec.js';
+import { flipperSegment } from '../src/engine/flipper.js';
 
 const DT = 1 / 120;
 
@@ -138,45 +139,64 @@ describe('the ball stays on the table', () => {
     }
   });
 
-  /** Shortest distance between two line segments, ignoring their radii. */
-  function segDistance(
-    a1: { x: number; y: number }, a2: { x: number; y: number },
-    b1: { x: number; y: number }, b2: { x: number; y: number },
-  ): number {
-    const clampT = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
-    const pointSeg = (p: { x: number; y: number }, s1: { x: number; y: number }, s2: { x: number; y: number }) => {
-      const dx = s2.x - s1.x, dy = s2.y - s1.y;
-      const l2 = dx * dx + dy * dy;
-      const t = l2 === 0 ? 0 : clampT(((p.x - s1.x) * dx + (p.y - s1.y) * dy) / l2);
-      return Math.hypot(p.x - (s1.x + t * dx), p.y - (s1.y + t * dy));
-    };
-    return Math.min(
-      pointSeg(a1, b1, b2), pointSeg(a2, b1, b2),
-      pointSeg(b1, a1, a2), pointSeg(b2, a1, a2),
-    );
+  /**
+   * Drop a ball at rest at `at` and report where it has got to after `seconds`.
+   *
+   * The flippers are left alone, so anything that stops has stopped for a reason
+   * in the geometry rather than because nobody pressed a button.
+   */
+  function dropAt(at: { x: number; y: number }, seconds = 4) {
+    const g = createGame();
+    g.phase = 'playing';
+    g.ball = { ...g.ball, pos: vec(at.x, at.y), vel: vec(0, 1) };
+    g.ballSave = 0;
+    g.saveSpent = true;
+    let drained = false;
+    for (let t = 0; t < seconds && !drained; t += DT) {
+      drained = stepGame(g, NO_INPUT, DT).some((e) => e.kind === 'drain');
+    }
+    return { g, drained };
   }
 
-  it('leaves each slingshot a ball-width clear of everything around it', () => {
-    // Three separate traps formed in this corner, all the same shape: a channel
-    // that narrows below the width of a ball, which the ball can enter from the
-    // wide end and then not fit through. Measuring it is the only reliable way
-    // to know, because it looks completely fine in a screenshot.
-    const g = createGame();
-    const slings = g.table.colliders.filter((c) => c.id.startsWith('sling'));
-    expect(slings).toHaveLength(2);
+  /** True if the ball is sitting on a bat, which is the one place it may rest. */
+  function onAFlipper(g: Game): boolean {
+    for (const f of [g.left, g.right]) {
+      const seg = flipperSegment(f);
+      const dx = seg.b.x - seg.a.x, dy = seg.b.y - seg.a.y;
+      const l2 = dx * dx + dy * dy;
+      const t = l2 === 0 ? 0 : Math.max(0, Math.min(1, ((g.ball.pos.x - seg.a.x) * dx + (g.ball.pos.y - seg.a.y) * dy) / l2));
+      const d = Math.hypot(g.ball.pos.x - (seg.a.x + t * dx), g.ball.pos.y - (seg.a.y + t * dy));
+      if (d <= BALL_RADIUS + f.radius + 6) return true;
+    }
+    return false;
+  }
 
-    for (const s of slings) {
-      for (const other of g.table.colliders) {
-        if (other === s || other.sensor || other.type !== 'segment' || !other.seg) continue;
-        const gap = segDistance(s.seg!.a, s.seg!.b, other.seg.a, other.seg.b)
-          - s.seg!.radius - other.seg.radius;
-        // A gap of zero or less is two pieces of geometry meeting, which is
-        // fine: the ball cannot get in there at all. The dangerous band is a
-        // gap wide enough to enter but too narrow to pass.
-        if (gap <= 0) continue;
-        expect(gap, `${s.id} pinches against ${other.id}`).toBeGreaterThan(BALL_RADIUS * 2);
+  it('has nowhere in the lower playfield a still ball can be left', () => {
+    // Three separate traps formed around the slingshots, all the same shape: a
+    // channel that narrows below the width of a ball, which the ball can enter
+    // from the wide end and then not fit through. All three were found by
+    // playing, never by a test, and all three looked completely fine in a
+    // screenshot.
+    //
+    // The old version of this measured the distance between pairs of colliders,
+    // which worked while the slingshot was a single line and stopped working the
+    // moment it became a triangle: the closest approach between the far edge of
+    // a triangle and a wall runs straight through the solid middle of the
+    // triangle, so it reported channels that do not exist. This drops a real ball
+    // into every part of the lower table instead and asks whether it ever gets
+    // out, which is the question the pair distance was only ever standing in for.
+    const stuck: string[] = [];
+    for (let x = 190; x <= 810; x += 20) {
+      for (let y = 1000; y <= 1340; y += 20) {
+        const { g, drained } = dropAt({ x, y });
+        if (drained || onAFlipper(g)) continue;
+        const moving = Math.hypot(g.ball.vel.x, g.ball.vel.y) > 25;
+        if (!moving) {
+          stuck.push(`(${x}, ${y}) -> (${Math.round(g.ball.pos.x)}, ${Math.round(g.ball.pos.y)})`);
+        }
       }
     }
+    expect(stuck, `balls came to rest off the flippers: ${stuck.join('; ')}`).toEqual([]);
   });
 
   it('brings a launched ball down the right orbit and into the middle', () => {

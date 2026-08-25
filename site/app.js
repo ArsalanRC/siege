@@ -300,8 +300,9 @@ function drawFurniture() {
  * panel is drawn from the art rather than from the collider's own bounds.
  */
 function drawStateOverArt() {
-  const SHIELD_TOP = 518;
-  const SHIELD_BOTTOM = 716;
+  // Measured off the art: the painted ogre panels run from 526 down to 737.
+  const SHIELD_TOP = 526;
+  const SHIELD_BOTTOM = 737;
 
   for (const target of game.table.targets) {
     if (target.active || !target.seg) continue;
@@ -427,8 +428,92 @@ function drawHabitrail() {
  * habitrail proved: geometry the drawing is derived from cannot drift away from
  * it.
  */
+/**
+ * The two scoop mouths, drawn as holes in the wall with a lit lip.
+ *
+ * The chamber behind each one is real geometry and the ball really goes into it,
+ * so it has to look like somewhere a ball can go. A mouth that is shut is drawn
+ * dark and unlit, which is the table telling the player the coil has not
+ * reloaded yet rather than the shot simply not working.
+ */
+function drawScoops() {
+  for (const s of game.table.scoops) {
+    const ready = !game.cooldowns.has(s.id);
+    const dx = s.mouth.x - s.centre.x;
+    const dy = s.mouth.y - s.centre.y;
+    const facing = Math.atan2(dy, dx);
+
+    ctx.save();
+    // The throat, sunk into the playfield.
+    ctx.fillStyle = 'rgb(12 8 6 / 0.88)';
+    ctx.beginPath();
+    ctx.arc(s.centre.x, s.centre.y, s.radius - 5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // The lip, drawn only across the opening so the chamber reads as a mouth
+    // rather than as a ring painted on the wood.
+    ctx.strokeStyle = ready ? '#e8c886' : '#6d5f45';
+    ctx.lineWidth = 9;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(s.centre.x, s.centre.y, s.radius, facing - 0.95, facing + 0.95);
+    ctx.stroke();
+
+    if (ready) {
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = 'rgb(216 168 66 / 0.16)';
+      ctx.beginPath();
+      ctx.arc(s.centre.x, s.centre.y, s.radius - 8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
 function drawLowerRails() {
   for (const c of game.table.colliders) {
+    // The orbit return is a wire rail like the lower ones, so it is drawn the
+    // same way rather than being left as a wall nobody can see.
+    if (c.id.startsWith('orbit') && c.seg) {
+      const { a, b } = c.seg;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgb(0 0 0 / 0.38)';
+      ctx.lineWidth = 13;
+      ctx.beginPath();
+      ctx.moveTo(a.x + 3, a.y + 9);
+      ctx.lineTo(b.x + 3, b.y + 9);
+      ctx.stroke();
+      ctx.strokeStyle = '#6f6459';
+      ctx.lineWidth = 12;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+      ctx.strokeStyle = '#e6d9b8';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y - 3);
+      ctx.lineTo(b.x, b.y - 3);
+      ctx.stroke();
+      for (const p of [a, b]) {
+        ctx.fillStyle = '#b9ad9d';
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      continue;
+    }
+    if (c.id.startsWith('lower-post') && c.circle) {
+      ctx.fillStyle = '#6f6459';
+      ctx.beginPath();
+      ctx.arc(c.circle.c.x, c.circle.c.y, c.circle.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#e6d9b8';
+      ctx.beginPath();
+      ctx.arc(c.circle.c.x - 2, c.circle.c.y - 3, c.circle.radius * 0.45, 0, Math.PI * 2);
+      ctx.fill();
+      continue;
+    }
     if (!c.id.startsWith('lower') || !c.seg) continue;
     const { a, b } = c.seg;
 
@@ -614,6 +699,7 @@ function render(now) {
     drawStateOverArt();
   }
   drawHabitrail();
+  drawScoops();
   drawLowerRails();
   drawLights(now);
   drawFlipper(game.left, art.flipper);
@@ -633,6 +719,11 @@ function consume(events) {
   for (const e of events) {
     if (e.kind === 'bumper') flash(e.at.x, e.at.y, 52, '255 210 120');
     else if (e.kind === 'sling') flash(e.at.x, e.at.y, 40, '255 140 120');
+    // The lamp lenses are the one thing on this table the ball passes straight
+    // over, so lighting them is the only way the player learns they are there.
+    else if (e.kind === 'lamp') flash(e.at.x, e.at.y, 34, '255 236 170', 420);
+    else if (e.kind === 'scoopCaught') flash(e.at.x, e.at.y, 70, '255 200 110', 900);
+    else if (e.kind === 'scoopFired') flash(e.at.x, e.at.y, 90, '255 240 190', 500);
     else if (e.kind === 'keepTaken') flash(LANE_X / 2, 300, 200, '255 225 150', 900);
     else if (e.kind === 'gateOpen') flash(LANE_X / 2, 400, 160, '216 168 66', 700);
     // A save that looks identical to losing a ball teaches the player nothing.
