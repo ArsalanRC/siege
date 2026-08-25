@@ -41,8 +41,49 @@ export const FLIPPER_LENGTH = 150;
  * The sprite's gold pivot boss is visibly wider than a 12 unit capsule, so a
  * ball aimed at the base of the flipper passed straight through the part of it
  * you can see. Reported as "the corner of the lever is just not hittable".
+ *
+ * It is also about right for a real bat: half an inch across the base at 1992
+ * units per metre is 12.6 units of half-width, and a rubber sleeve takes it the
+ * rest of the way.
  */
 export const FLIPPER_RADIUS = 16;
+
+/**
+ * The bat's silhouette, measured off `flipper.png`.
+ *
+ * A real flipper is a wedge, not a rod: wide at the hinge and tapering to a
+ * point. The collision was a capsule of one radius, so it was thinner than the
+ * drawing at the base and fatter than it at the tip, and the ball bounced off
+ * air near the tip and passed through paint near the hinge. Reported as "the two
+ * flippers should be the exact shape, not a different shape".
+ *
+ * These are the half-height of the sprite's opaque pixels at ten points along
+ * the bat, as a **fraction of its half-height at the hinge**. Both the collision
+ * and the drawing are scaled from this one list, so the outline the ball hits
+ * and the outline you can see are the same shape by construction. That is the
+ * habitrail lesson applied to a moving part.
+ *
+ * Scanned by walking the alpha channel column by column. The sprite's own spine
+ * droops 3.3 degrees inside its image, which is the artist drawing the bat at a
+ * slight angle rather than anything the physics should inherit, so the renderer
+ * takes it back out.
+ */
+const BAT_TAPER: readonly number[] = [
+  1.00, 0.94, 0.87, 0.81, 0.76, 0.71, 0.64, 0.57, 0.49, 0.41, 0.36,
+];
+
+/** How the sprite maps onto the bat: hinge and tip, in fractions of its width. */
+export const BAT_SPRITE = {
+  /** Where the pivot boss sits in the image, as a fraction of width and height. */
+  hingeX: 76 / 512,
+  hingeY: 73.5 / 148,
+  /** Where the tip sits, as a fraction of width. */
+  tipX: 505 / 512,
+  /** Half-height at the hinge, as a fraction of image height. Sets the scale. */
+  hingeHalf: 73.5 / 148,
+  /** The spine's droop inside the image, in radians, taken out when drawing. */
+  droop: Math.atan2((111.5 - 73.5) / 148, ((485 - 76) / 512) * (512 / 429)),
+} as const;
 
 /** Radians per second on the way up, from 60 degrees in 35 milliseconds. */
 export const FLIP_SPEED = 32;
@@ -143,7 +184,55 @@ export function flipperSegment(f: Flipper): Segment {
   return { a: f.pivot, b: flipperTip(f), radius: f.radius };
 }
 
-/** Wrap a flipper as something the physics step knows how to collide with. */
+/**
+ * The bat as the wedge it is drawn as: a chain of capsules that narrow.
+ *
+ * Ten short segments rather than one long one, each carrying the radius the
+ * sprite is that wide at. The steps between neighbours are under two units, well
+ * below anything a 54 unit ball can feel, and the radius only ever decreases
+ * along the chain so the outline stays convex and nothing can catch on a joint.
+ */
+export function flipperSegments(f: Flipper): Segment[] {
+  const dir = { x: Math.cos(f.angle), y: Math.sin(f.angle) };
+  const steps = BAT_TAPER.length - 1;
+  const out: Segment[] = [];
+  for (let i = 0; i < steps; i++) {
+    const t0 = (i / steps) * f.length;
+    const t1 = ((i + 1) / steps) * f.length;
+    // The radius at the middle of this piece, so the chain neither over nor
+    // under-covers the drawn edge.
+    const mid = (BAT_TAPER[i]! + BAT_TAPER[i + 1]!) / 2;
+    out.push({
+      a: { x: f.pivot.x + dir.x * t0, y: f.pivot.y + dir.y * t0 },
+      b: { x: f.pivot.x + dir.x * t1, y: f.pivot.y + dir.y * t1 },
+      radius: f.radius * mid,
+    });
+  }
+  return out;
+}
+
+/**
+ * Wrap a flipper as things the physics step knows how to collide with.
+ *
+ * Every piece shares the same pivot and the same angular rate, so a tip shot is
+ * still faster than a base shot for exactly the reason it always was: the
+ * surface velocity comes from `omega * r` at the contact point, and nothing here
+ * treats the pieces differently.
+ */
+export function flipperColliders(f: Flipper): MovingCollider[] {
+  const pivot = f.pivot;
+  const omega = f.omega;
+  return flipperSegments(f).map((seg) => ({
+    id: `flipper-${f.side}`,
+    seg,
+    material: FLIPPER_MATERIAL,
+    surfaceVelocity(point: Vec): Vec {
+      return pointVelocity(point, pivot, omega);
+    },
+  }));
+}
+
+/** The whole bat as one capsule. Kept for the parts that only need its spine. */
 export function flipperCollider(f: Flipper): MovingCollider {
   const seg = flipperSegment(f);
   const pivot = f.pivot;

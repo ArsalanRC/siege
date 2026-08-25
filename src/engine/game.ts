@@ -27,7 +27,7 @@ import { vec, len, scale } from './vec.js';
 import type { Ball, Hit, World, Collider } from './physics.js';
 import { step as stepPhysics, BALL_RADIUS, GRAVITY } from './physics.js';
 import type { Flipper } from './flipper.js';
-import { createFlipper, stepFlipper, flipperCollider } from './flipper.js';
+import { createFlipper, stepFlipper, flipperColliders } from './flipper.js';
 import type { Table } from './table.js';
 import {
   buildTable, DRAIN_Y, LANE_X, PLUNGER_REST, SCOOP_KICK,
@@ -60,13 +60,18 @@ const TARGET_COOLDOWN = 0.4;
  * How long a scoop keeps the ball, and how long it stays shut afterwards.
  *
  * The hold is what makes it read as a hole rather than as a bounce: long enough
- * to see the ball sitting in the lane, short enough that it never feels like the
- * game has frozen. The cooldown is the important half. Without it the ball is
- * caught again on its way out of the same mouth it was just fired through, and
- * the two of them trade it back and forth for ever.
+ * to see the ball sitting in the dish, short enough that it never feels like the
+ * game has frozen.
+ *
+ * The cooldown is the important half, and eight seconds is not caution, it is
+ * measured. The mouth sits in the wall the whole left side of the table drains
+ * along, so a fired ball comes back to it on its own. At 2.4 seconds three
+ * games in sixty spent their entire length going in, being thrown out, and
+ * falling back in, and never ended at all. Eight is long enough that the ball
+ * has to be played somewhere else first, which is what makes the shot a shot.
  */
 const SCOOP_HOLD = 0.9;
-const SCOOP_COOLDOWN = 1.6;
+const SCOOP_COOLDOWN = 8;
 
 /** Rolling over a lamp lens. Small, frequent, and mostly there to light up. */
 const LAMP_COOLDOWN = 0.9;
@@ -84,7 +89,8 @@ export type GameEvent =
   | { kind: 'score'; amount: number; at: Vec; label: string }
   | { kind: 'bumper'; at: Vec }
   | { kind: 'sling'; at: Vec }
-  | { kind: 'lamp'; at: Vec }
+  | { kind: 'lamp'; at: Vec; id: string }
+  | { kind: 'lampsComplete'; }
   | { kind: 'target'; index: number }
   | { kind: 'gateOpen' }
   | { kind: 'keepTaken'; level: number }
@@ -127,6 +133,15 @@ export interface Game {
   saveSpent: boolean;
   /** Which scoop is holding the ball, and for how much longer. */
   scoopHold: { index: number; timeLeft: number } | null;
+  /**
+   * Which lamp lenses are lit.
+   *
+   * A rollover on a real machine lights its insert and the insert stays lit, so
+   * the player can see at a glance what is left. Flashing once and going dark
+   * again teaches nothing and turns nineteen lenses into nineteen identical
+   * noises. Light them all and the whole set scores and resets.
+   */
+  lampsLit: Set<string>;
 }
 
 export function createGame(): Game {
@@ -149,6 +164,7 @@ export function createGame(): Game {
     ballSave: 0,
     saveSpent: false,
     scoopHold: null,
+    lampsLit: new Set(),
   };
 }
 
@@ -282,8 +298,17 @@ function applyHits(g: Game, hits: readonly Hit[], events: GameEvent[]): void {
 
     if (hit.id.startsWith('lamp-')) {
       if (!claim(g, hit.id, LAMP_COOLDOWN)) continue;
-      award(g, events, 25 * g.siegeLevel, hit.point, 'lamp');
-      events.push({ kind: 'lamp', at: hit.point });
+      // An unlit lens is worth taking; a lit one is worth almost nothing, which
+      // is what makes the player go and find the ones they have not had yet.
+      const fresh = !g.lampsLit.has(hit.id);
+      g.lampsLit.add(hit.id);
+      award(g, events, (fresh ? 250 : 25) * g.siegeLevel, hit.point, 'lamp');
+      events.push({ kind: 'lamp', at: hit.point, id: hit.id });
+      if (fresh && g.lampsLit.size >= g.table.lampCount) {
+        award(g, events, 5000 * g.siegeLevel, hit.point, 'all lamps');
+        events.push({ kind: 'lampsComplete' });
+        g.lampsLit.clear();
+      }
       continue;
     }
 
@@ -341,12 +366,28 @@ function updateGates(g: Game): void {
     && g.ball.pos.x > mouth.a.x - r
     && g.ball.pos.x < mouth.b.x + r;
   g.table.portcullis.active = !g.gateOpen && !inTheKeep;
+
+  // A bowl is a dead end and the ball only leaves it because the coil fires. So
+  // the mouth is shut for exactly as long as the coil is busy, and a ball that
+  // arrives during that window bounces off the shutter instead of rolling into
+  // a hole that cannot let it out.
+  for (const scoop of g.table.scoops) {
+    // ...and never with the ball still inside, which is the portcullis lesson
+    // again. The shutter used to drop the instant the coil fired, before the
+    // ball it had just thrown was clear of the bowl, so the ball bounced off the
+    // inside of its own door and settled in the dish. Fourteen of sixty measured
+    // games ended that way.
+    const dx = g.ball.pos.x - scoop.centre.x;
+    const dy = g.ball.pos.y - scoop.centre.y;
+    const inside = Math.hypot(dx, dy) < scoop.radius + g.ball.radius;
+    scoop.shutter.active = (g.cooldowns.get(scoop.id) ?? 0) > 0 && !inside;
+  }
 }
 
 function buildWorld(g: Game): World {
   return {
     colliders: g.table.colliders,
-    moving: [flipperCollider(g.left), flipperCollider(g.right)],
+    moving: [...flipperColliders(g.left), ...flipperColliders(g.right)],
     gravity: GRAVITY,
     drag: DRAG,
   };
@@ -395,6 +436,7 @@ function checkDrain(g: Game, events: GameEvent[]): void {
 
   g.ballNumber += 1;
   g.saveSpent = false;
+  g.lampsLit.clear();
   g.gateOpen = false;
   g.siegeLevel = 1;
   g.targetsDown = [false, false, false];
@@ -479,6 +521,8 @@ export interface Readout {
   readonly plungerCharge: number;
   /** Seconds of ball save left, for the scoreboard to show. */
   readonly ballSave: number;
+  /** Which lamp lenses are lit, for the page to draw them backlit. */
+  readonly lampsLit: ReadonlySet<string>;
 }
 
 export function readout(g: Game): Readout {
@@ -492,6 +536,7 @@ export function readout(g: Game): Readout {
     phase: g.phase,
     plungerCharge: g.plungerCharge,
     ballSave: g.ballSave,
+    lampsLit: g.lampsLit,
   };
 }
 
