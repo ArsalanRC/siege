@@ -328,8 +328,20 @@ function lowerWalls(): Collider[] {
   // Both start BELOW the slingshots, not beside them. Starting at y=1000 put
   // the right hand wall 28 units from the right slingshot, and 28 is a gap a
   // 54 unit ball can reach into and not fit through.
-  const left = segment(vec(PLAY_LEFT, 1150), vec(270, 1300), 8);
-  const right = segment(vec(LANE_X, 1150), vec(mx(270), 1300), 8);
+  // They end close enough to the flipper pivots to CLOSE the outlanes rather
+  // than merely narrow them: about 24 units of gap, which a 54 unit ball cannot
+  // get through. That is deliberate. With the outlanes open a ball was lost in
+  // one to five seconds and the game was miserable, and an outlane drain is the
+  // least interesting way to lose anyway. The centre drain between the flipper
+  // tips is still 104 units wide, so there is still a real way to lose, and it
+  // is the one the player can actually do something about.
+  // Each ends ABOVE its flipper pivot, never below it. Ending at y=1290, under
+  // the pivots at 1258, made a V between the wall's end and the rounded back of
+  // the bat and the ball parked in it at (729, 1242). Ending above means the
+  // wall delivers onto the top of the bat instead, which is the same lesson the
+  // lane guides taught three times before they were removed.
+  const left = segment(vec(PLAY_LEFT, 1175), vec(304, 1235), 8);
+  const right = segment(vec(LANE_X, 1175), vec(mx(304), 1235), 8);
   return solid('lower', [left, right], PLASTIC);
 }
 
