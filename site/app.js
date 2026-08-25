@@ -12,7 +12,7 @@
  */
 
 import { createGame, stepGame, readout, PLUNGER_CHARGE_TIME } from './lib/engine/game.js';
-import { flipperSegment, flipperTip } from './lib/engine/flipper.js';
+import { flipperSegment, flipperSegments, flipperTip, BAT_SPRITE } from './lib/engine/flipper.js';
 import { TABLE_W, TABLE_H, LANE_X, DRAIN_Y, CASTLE_LEFT, CASTLE_RIGHT, CASTLE_TOP, ROOF_FALL, RAIL_IMAGE_TOP, RAIL_IMAGE_H } from './lib/engine/table.js';
 import { applyLanguage, toggleLanguage, currentLanguage, t } from './i18n.js';
 
@@ -90,7 +90,40 @@ const trail = [];
  * that the two sides disagree, and they sit side by side where any difference
  * is immediately obvious.
  */
-const art = { playfield: null, ball: null, flipper: null, habitrail: null };
+const art = { playfield: null, ball: null, flipper: null, habitrail: null, railRise: null, railFall: null };
+
+/**
+ * Where each supplied rail's own axis runs inside its image, in image pixels.
+ *
+ * Measured by fitting a principal axis to the opaque alpha: the mounting feet at
+ * each end are what the numbers are, and they are what gets mapped onto the two
+ * ends of a collider. Same trick as the habitrail: the drawing is placed from
+ * the geometry, so a rail cannot be drawn anywhere except along the thing the
+ * ball actually runs on.
+ */
+const RAIL_ART = {
+  rise: { p0: [1640, 121], p1: [25, 828] },
+  fall: { p0: [28, 115], p1: [1666, 854] },
+};
+
+/** Draw a rail image so its own axis lands exactly on `a`..`b`. */
+function drawRailArt(image, spec, a, b) {
+  const [ax, ay] = spec.p0;
+  const [bx, by] = spec.p1;
+  const imgLen = Math.hypot(bx - ax, by - ay);
+  const imgAngle = Math.atan2(by - ay, bx - ax);
+  const segLen = Math.hypot(b.x - a.x, b.y - a.y);
+  const scale = segLen / imgLen;
+
+  ctx.save();
+  ctx.translate(a.x, a.y);
+  ctx.rotate(Math.atan2(b.y - a.y, b.x - a.x));
+  ctx.scale(scale, scale);
+  ctx.rotate(-imgAngle);
+  ctx.translate(-ax, -ay);
+  ctx.drawImage(image, 0, 0);
+  ctx.restore();
+}
 
 function loadArt(name, file) {
   const img = new Image();
@@ -108,6 +141,8 @@ loadArt('playfield', 'playfield.jpg');
 loadArt('ball', 'ball.png');
 loadArt('flipper', 'flipper.png');
 loadArt('habitrail', 'habitrail.png');
+loadArt('railRise', 'rail-rise.png');
+loadArt('railFall', 'rail-fall.png');
 
 /* ---------- drawing ---------- */
 
@@ -471,12 +506,50 @@ function drawScoops() {
   }
 }
 
+/**
+ * The lamp lenses that have been rolled over, drawn lit.
+ *
+ * A rollover on a real machine lights its insert and it stays lit until the set
+ * is collected. Without that the nineteen lenses are nineteen identical noises
+ * and the player has no way to see which ones are left, which was the note:
+ * "there should be a backlight in them when they are rolled over".
+ *
+ * Drawn under the ball and over the art, with the glow sized from the collider
+ * so a lit lens can never be lit in the wrong place.
+ */
+function drawLamps() {
+  const lit = readout(game).lampsLit;
+  if (!lit.size) return;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (const c of game.table.colliders) {
+    if (!c.circle || !lit.has(c.id)) continue;
+    const { x, y } = c.circle.c;
+    const r = c.circle.radius;
+    const g = ctx.createRadialGradient(x, y, r * 0.15, x, y, r * 1.35);
+    g.addColorStop(0, 'rgb(255 236 170 / 0.85)');
+    g.addColorStop(0.55, 'rgb(255 196 90 / 0.42)');
+    g.addColorStop(1, 'rgb(255 170 60 / 0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r * 1.35, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 function drawLowerRails() {
   for (const c of game.table.colliders) {
     // The orbit return is a wire rail like the lower ones, so it is drawn the
     // same way rather than being left as a wall nobody can see.
     if (c.id.startsWith('orbit') && c.seg) {
       const { a, b } = c.seg;
+      // The orbit return falls to the LEFT, so it is the rising image: its own
+      // axis runs from the top right foot to the bottom left one.
+      if (art.railRise) {
+        drawRailArt(art.railRise, RAIL_ART.rise, a, b);
+        continue;
+      }
       ctx.lineCap = 'round';
       ctx.strokeStyle = 'rgb(0 0 0 / 0.38)';
       ctx.lineWidth = 13;
@@ -597,9 +670,26 @@ function drawFlipper(f, image) {
     // iron while the rubber sits on the side nothing ever touches.
     if (f.side === 'left') ctx.scale(1, -1);
 
-    const h = f.radius * 2 * 1.6;
-    const w = f.length * 1.08;
-    ctx.drawImage(image, -w * 0.06, -h / 2, w, h);
+    // The sprite is placed from the same numbers the collision is built from, so
+    // the bat you can see and the bat the ball hits are one shape.
+    //
+    // It used to be `w = length * 1.08` and `h = radius * 2 * 1.6`, two fudges
+    // chosen to make the picture look right against a capsule it did not match.
+    // The result was a drawn bat half again fatter than the collision at the
+    // hinge and twice as fat at the tip, which is the "different shape" that got
+    // reported. Now the hinge lands on the pivot, the tip lands on the tip, and
+    // the half-height at the hinge is exactly the collision radius.
+    const span = BAT_SPRITE.tipX - BAT_SPRITE.hingeX;
+    const w = f.length / span;
+    const h = f.radius / BAT_SPRITE.hingeHalf;
+
+    // The artist drew the bat at a slight angle inside its own image. That is a
+    // property of the picture, not of the machine, so it comes back out here
+    // rather than being inherited by the physics. The mirror above flips the
+    // sense of it, which is why the sign follows the side.
+    ctx.rotate(f.side === 'left' ? BAT_SPRITE.droop : -BAT_SPRITE.droop);
+
+    ctx.drawImage(image, -BAT_SPRITE.hingeX * w, -BAT_SPRITE.hingeY * h, w, h);
     ctx.restore();
     return;
   }
@@ -675,14 +765,16 @@ const GEOMETRY_COLOURS = [
   ['sling', '#ff2d55', 'Slingshot faces'],
   ['triangle', '#ff7a95', 'Slingshot backs'],
   ['target', '#ffd400', 'Drop targets'],
+  ['scoop-shutter', '#b0006f', 'Scoop shutters'],
   ['scoop', '#ff35ff', 'Scoops'],
   ['lamp', '#00b7ff', 'Lamp rollovers'],
-  ['lower', '#00e5c0', 'Inlane guide + post'],
+  ['lower', '#00e5c0', 'Inlane/outlane post'],
   ['orbit', '#a45cff', 'Orbit return'],
+  ['castle-back', '#7a5cff', 'Keep chamber'],
   ['castle', '#00d0ff', 'Castle'],
-  ['portcullis', '#00d0ff', null],
+  ['portcullis', '#ff9a3c', 'Portcullis'],
   ['lane', '#dfe6ec', 'Shooter lane'],
-  ['gate', '#ffd400', null],
+  ['gate', '#7a5cff', null],
   ['inlane', '#66ff33', 'Lane sensors'],
   ['outlane', '#66ff33', null],
   ['wall', '#00ff6a', 'Walls'],
@@ -720,14 +812,16 @@ function drawGeometry() {
     }
 
     ctx.setLineDash([]);
+    // Every piece of the bat, so the overlay shows the wedge rather than a rod.
     for (const f of [game.left, game.right]) {
-      const seg = flipperSegment(f);
-      ctx.strokeStyle = pass === 0 ? 'rgb(0 0 0 / 0.85)' : '#ffffff';
-      ctx.lineWidth = pass === 0 ? f.radius * 2 + 6 : f.radius * 2;
-      ctx.beginPath();
-      ctx.moveTo(seg.a.x, seg.a.y);
-      ctx.lineTo(seg.b.x, seg.b.y);
-      ctx.stroke();
+      for (const seg of flipperSegments(f)) {
+        ctx.strokeStyle = pass === 0 ? 'rgb(0 0 0 / 0.85)' : '#ffffff';
+        ctx.lineWidth = pass === 0 ? seg.radius * 2 + 5 : seg.radius * 2;
+        ctx.beginPath();
+        ctx.moveTo(seg.a.x, seg.a.y);
+        ctx.lineTo(seg.b.x, seg.b.y);
+        ctx.stroke();
+      }
     }
   }
 
@@ -779,6 +873,7 @@ function render(now) {
     drawStateOverArt();
   }
   drawHabitrail();
+  drawLamps();
   drawScoops();
   drawLowerRails();
   drawLights(now);

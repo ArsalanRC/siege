@@ -99,8 +99,8 @@ export const DRAIN_Y = 1580;
  * It is the third time this table has grown that exact wedge. At 1282 the gap is
  * 57 and the ball goes through.
  */
-export const FLIPPER_PIVOT_LEFT: Vec = vec(320, 1282);
-export const FLIPPER_PIVOT_RIGHT: Vec = vec(673, 1282);
+export const FLIPPER_PIVOT_LEFT: Vec = vec(339, 1288);
+export const FLIPPER_PIVOT_RIGHT: Vec = vec(654, 1288);
 
 /** Where a new ball is parked, on the centre line of the painted lane. */
 export const PLUNGER_REST: Vec = vec(956, 1380);
@@ -232,24 +232,39 @@ const LEFT_BORDER: ReadonlyArray<readonly [number, number]> = [
  * out to 105 at y = 880 and pulls back in to 177 by y = 1010. These points are
  * the measured edge, one per place it changes direction.
  */
-const LEFT_WALL: ReadonlyArray<readonly [number, number]> = [
+const LEFT_WALL_UPPER: ReadonlyArray<readonly [number, number]> = [
   // The floor of the bumper pocket, falling right at eleven degrees so a ball
   // that has finished with the bumpers rolls out of them instead of settling.
   // Below y = 470 the painted band is buried under the caps and the scoop, so
   // there is nothing left to trace and this is the line that carries the orbit
   // round into the playfield.
   [160, 494], [250, 510], [292, 520], [278, 600],
-  // The scoop mouth interrupts the wall here. See scoops().
-  [248, 700], [229, 760], [198, 776], [164, 792], [136, 816],
+  // ...and stops at the upper lip of the scoop's mouth.
+  [248, 700],
+];
+
+/** Below the scoop's mouth, down to where the apron takes over. */
+const LEFT_WALL_LOWER: ReadonlyArray<readonly [number, number]> = [
+  [214, 768], [198, 776], [164, 792], [136, 816],
   [105, 872], [105, 884], [118, 912], [129, 944], [151, 984],
   [173, 1000], [180, 1020], [177, 1080], [177, 1360],
 ];
 
 /** The same scan down the right side. Not a mirror of the left: measured. */
-const RIGHT_WALL: ReadonlyArray<readonly [number, number]> = [
-  [745, 588], [745, 616], [756, 624],
-  // The scoop mouth interrupts the wall here too.
-  [770, 700], [760, 744], [768, 760], [794, 776], [800, 792],
+/**
+ * There is no wall above the right scoop's mouth. The orbit rail IS the wall.
+ *
+ * Two goes at having both taught the same thing twice. A rail aimed at the far
+ * end of a wall makes a V that closes from 73 units to nothing, and a ball found
+ * the 54 unit point of it at (784, 637). Aimed at the near end it makes a corner
+ * instead, and the wall's own free upper end became a bare post the ball perched
+ * on at (771, 582). One line doing the job of two has neither.
+ */
+const RIGHT_WALL_UPPER: ReadonlyArray<readonly [number, number]> = [
+  [763, 704],
+];
+const RIGHT_WALL_LOWER: ReadonlyArray<readonly [number, number]> = [
+  [790, 774], [794, 776], [800, 792],
   [846, 808], [865, 840], [870, 880], [858, 920], [851, 944],
   [826, 976], [806, 1000], [805, 1030], [816, 1080], [816, 1360],
 ];
@@ -345,6 +360,12 @@ const SLING_RIGHT: ReadonlyArray<readonly [number, number]> = [
  * without putting anything invisible in the ball's way.
  */
 const LAMPS: ReadonlyArray<readonly [number, number]> = [
+  // Five of these were being missed. A circle fit over the WHOLE table rather
+  // than only the bare wood of the lower playfield finds nineteen lenses the
+  // ball can reach, not fourteen: there are lenses up in both orbits and in the
+  // neck under the castle, and those are the parts of the table that had nothing
+  // to collect at all.
+  [62, 311], [877, 433], [307, 500], [710, 507], [276, 671],
   [232, 826], [422, 761], [575, 763], [734, 669], [765, 823],
   [153, 890], [818, 897], [304, 1019], [698, 1019],
   [398, 1120], [604, 1120],
@@ -364,9 +385,47 @@ const LAMP_RADIUS = 26;
  * falls to the left, so the ball turned the opposite way to the thing it looked
  * like it hit.
  */
-const SCOOP_LEFT_CENTRE: Vec = vec(208, 636);
-const SCOOP_RIGHT_CENTRE: Vec = vec(818, 640);
-const SCOOP_R = 46;
+/**
+ * The hole is the painted basin BELOW each lane, not the lane itself.
+ *
+ * The first pass put the chamber in the middle of the red capsule, which was
+ * wrong and was reported as wrong: "the scoops don't match the hole, should be
+ * below the red area where the arrow was". The arrow points up out of the hole.
+ * Underneath each lane the art paints a gold-rimmed bowl with a dark green dish
+ * inside it, which is what a scoop looks like from above, and that is where the
+ * ball belongs.
+ *
+ * Measured off the rims: the left bowl is centred (158, 732) with a radius of
+ * 46, the right one (843, 748) with a radius of 42. Not a mirrored pair, because
+ * nothing on this table is.
+ */
+const SCOOP_LEFT_CENTRE: Vec = vec(158, 732);
+const SCOOP_LEFT_R = 46;
+const SCOOP_RIGHT_CENTRE: Vec = vec(843, 748);
+const SCOOP_RIGHT_R = 42;
+
+/**
+ * Both bowls sit outside the playfield wall, so each needs a throat.
+ *
+ * The left bowl's right edge is at 204 and the wall beside it is at about 243,
+ * so there are forty units of painted ironwork in between. The mouth is a gap in
+ * the wall and two short walls funnel from it into the bowl.
+ *
+ * The mouth is ONE BALL wide, 63 on the left and 60 on the right, and that is
+ * the second thing it had to learn. At 106 it was a hole the whole side of the
+ * table drained into: a measured run caught 1702 balls across sixty games,
+ * twenty-eight a game, and a scoop you cannot avoid is not a shot. Both ends of
+ * the gap are points the wall measures to anyway, so narrowing it moved the
+ * geometry nowhere.
+ */
+function scoopMouth(upper: ReadonlyArray<readonly [number, number]>,
+                    lower: ReadonlyArray<readonly [number, number]>): readonly [Vec, Vec] {
+  const a = upper[upper.length - 1]!;
+  const b = lower[0]!;
+  return [vec(a[0], a[1]), vec(b[0], b[1])];
+}
+const SCOOP_LEFT_MOUTH = scoopMouth(LEFT_WALL_UPPER, LEFT_WALL_LOWER);
+const SCOOP_RIGHT_MOUTH = scoopMouth(RIGHT_WALL_UPPER, RIGHT_WALL_LOWER);
 
 /** How much extra speed each thing throws the ball with, in units per second. */
 const BUMPER_KICK = 1450;
@@ -374,6 +433,16 @@ const SLING_KICK = 1150;
 
 /** A scoop lets go hard. This is a coil, not a bounce. */
 export const SCOOP_KICK = 3000;
+
+/**
+ * How far above the mouth's own line the coil aims, in radians.
+ *
+ * Small, and it has to be. At half a radian the ball left the dish at 27 degrees
+ * and hit the roof of its own throat 100 units later, bounced back into the bowl
+ * and started the cycle again. Seven degrees clears the lip and still puts some
+ * lift on the ball.
+ */
+const SCOOP_TILT = 0.12;
 
 let nextId = 0;
 function id(prefix: string): string {
@@ -450,12 +519,9 @@ function sensorCircle(name: string, c: Vec, radius: number): Collider {
  * ends of the scoop chamber's own arc, so there is no free end anywhere.
  */
 function leftWall(): Collider[] {
-  const chain = [...pts(LEFT_BORDER), ...pts(LEFT_WALL)];
-  const lips = scoopLips();
-  const breakAt = LEFT_BORDER.length + 3;
   return solid('wall', [
-    ...polyline([...chain.slice(0, breakAt), lips.leftUpper]),
-    ...polyline([lips.leftLower, ...chain.slice(breakAt)]),
+    ...polyline([...pts(LEFT_BORDER), ...pts(LEFT_WALL_UPPER)]),
+    ...polyline(pts(LEFT_WALL_LOWER)),
     ...polyline(pts(APRON_LEFT)),
   ], WOOD);
 }
@@ -478,15 +544,13 @@ function leftWall(): Collider[] {
  */
 function rightWall(): Collider[] {
   const right = LANE_OUTER_X;
-  const chain = pts(RIGHT_WALL);
-  const lips = scoopLips();
   const top = pts(LEFT_BORDER)[0]!;
   const segs: Segment[] = [
     segment(top, vec(right - CORNER_R, TOP_WALL_Y)),
     ...arcToSegments(vec(right - CORNER_R, CORNER_R), CORNER_R, Math.PI * 1.5, Math.PI * 2, 16),
     segment(vec(right, CORNER_R), vec(right, DRAIN_Y)),
-    ...polyline([...chain.slice(0, 3), lips.rightUpper]),
-    ...polyline([lips.rightLower, ...chain.slice(3)]),
+    ...polyline(pts(RIGHT_WALL_UPPER)),
+    ...polyline(pts(RIGHT_WALL_LOWER)),
     ...polyline(pts(APRON_RIGHT)),
   ];
   return [
@@ -502,7 +566,7 @@ function rightWall(): Collider[] {
     // the return wall just too far below to touch, at (838, 511), and stayed
     // there. A corner sticking out into a lane needs either a ball's clearance
     // under it or none at all.
-    ...solid('orbit', [segment(vec(LANE_X, 548), chain[0]!, 5)], RAIL),
+    ...solid('orbit', [segment(vec(LANE_X, 548), pts(RIGHT_WALL_UPPER)[0]!, 5)], RAIL),
   ];
 }
 
@@ -645,30 +709,42 @@ function bumpers(): Collider[] {
  * slingshot instead. The rail runs down from the post to the flipper pivot, the
  * outlane is the channel outside it, and the inlane is the channel inside.
  *
- * Every number here is a clearance, not a preference:
+ * Every number here is a clearance, not a preference. The budget from the wall
+ * at 177 to the back of the bat at 313 is 136 units, and the post is 24 of it,
+ * so the two lanes get 56 each and there is nothing spare:
  *
- * - outlane 177 to 234, which is **57** for a 54 unit ball
- * - the rail is 6 thick, so 234 to 246
- * - inlane 246 to 304, the back of the bat, which is **58**
- * - the post is 68 clear of the slingshot's lower corner, so a ball chooses a
+ * - outlane 177 to 233, which is **56** for a 54 unit ball
+ * - the post is 233 to 257
+ * - inlane 257 to 313, the back of the bat, which is **56**
+ * - the post is 59 clear of the slingshot's lower corner, so a ball chooses a
  *   side rather than wedging between them
  *
- * They only just fit. The whole budget from the wall to the back of the bat is
- * 127 units and two lanes and a rail need 121 of it.
+ * The rail's lower end sits 25 units from the pivot, just inside the bat's own
+ * 26 unit back, and that number is measured too. Buried deeper the rail's side
+ * emerges from the bat at an angle and makes a notch: with the bat at 26 the
+ * ball sat in that notch at (306, 1248) in seventeen games of sixty. Ending it
+ * where its rounded cap barely clears the bat leaves a bump rather than a
+ * corner, and a ball rolls off a bump.
  */
 function laneGuides(): Collider[] {
-  const out: Collider[] = [];
-  for (const side of [
-    { top: vec(246, 1266), foot: vec(306, 1276), postAt: vec(246, 1266) },
-    { top: vec(747, 1266), foot: vec(687, 1276), postAt: vec(747, 1266) },
-  ]) {
-    out.push(...solid('lower', [segment(side.top, side.foot, 6)], PLASTIC));
-    // A round cap on the top end, which is the inlane/outlane post itself. A
-    // bare segment end is a corner, and a corner beside a lane is how the last
-    // three wedges on this table started.
-    out.push(post('lower-post', side.postAt, 12, RUBBER, 220));
-  }
-  return out;
+  // One post per side and no rail, and the rail's absence is the fix rather
+  // than a simplification.
+  //
+  // A rail has to come down to the bat, and where its side emerges from the
+  // bat's 26 unit back it makes a notch of about 60 degrees. A ball sat in that
+  // notch at (304, 1249) in nineteen games of sixty, and it sat there however
+  // the flippers were played, because the back of a bat is the one part of it
+  // that does not move: surface speed is omega times radius and the radius at
+  // the pivot is nothing. Every rail angle that closes the notch puts the post
+  // inside the slingshot's clearance instead.
+  //
+  // A single post OVERLAPPING the bat has no notch to sit in at all. It also
+  // does the rail's real job, which is to stop the ball slipping behind the bat:
+  // the gap between them is negative, so there is nothing to slip through.
+  return [
+    post('lower-post', vec(295, 1290), 20, RUBBER, 220),
+    post('lower-post', vec(698, 1290), 20, RUBBER, 220),
+  ];
 }
 
 /**
@@ -710,18 +786,58 @@ function dropTargets(): Collider[] {
   }));
 }
 
-/** The two ends of the arc each scoop chamber leaves open to the playfield. */
-function scoopLips(): {
-  leftUpper: Vec; leftLower: Vec; rightUpper: Vec; rightLower: Vec;
-} {
-  const at = (c: Vec, deg: number): Vec =>
-    vec(c.x + Math.cos((deg * Math.PI) / 180) * SCOOP_R, c.y + Math.sin((deg * Math.PI) / 180) * SCOOP_R);
-  return {
-    leftUpper: at(SCOOP_LEFT_CENTRE, -24),
-    leftLower: at(SCOOP_LEFT_CENTRE, 76),
-    rightUpper: at(SCOOP_RIGHT_CENTRE, 204),
-    rightLower: at(SCOOP_RIGHT_CENTRE, 104),
-  };
+/**
+ * The two ends of the arc each bowl leaves open, aimed at its own mouth.
+ *
+ * These used to be fixed angles, and the fixed angles were wrong: the left bowl
+ * opened towards 20 degrees below horizontal while its mouth sits 1.6 degrees
+ * above it. The coil then fired the ball out of the dish and straight into the
+ * roof of its own throat, 50 units later, and it dropped back in. Measured: out
+ * at 2987 units a second, down to 349 within ten frames, having moved 19 units.
+ *
+ * Computing the opening from the mouth means the bowl always faces the way out.
+ */
+const SCOOP_HALF_OPEN = (50 * Math.PI) / 180;
+
+function scoopOpening(centre: Vec, radius: number, mouth: readonly [Vec, Vec]): [Vec, Vec] {
+  const to = Math.atan2(
+    (mouth[0].y + mouth[1].y) / 2 - centre.y,
+    (mouth[0].x + mouth[1].x) / 2 - centre.x,
+  );
+  const at = (a: number): Vec => vec(centre.x + Math.cos(a) * radius, centre.y + Math.sin(a) * radius);
+  return [at(to - SCOOP_HALF_OPEN), at(to + SCOOP_HALF_OPEN)];
+}
+
+/**
+ * Pair each end of the mouth with the lip on its own side.
+ *
+ * By NEAREST, never by name. The two lips come back in the order the angles run,
+ * which reverses between a bowl that opens right and one that opens left, so
+ * naming them "upper" and "lower" was true on one side and a lie on the other.
+ * The right scoop's throat was therefore wired as a cross: the top of the mouth
+ * ran to the bottom of the bowl and the bottom to the top, which sealed the
+ * entrance completely. Two thousand seven hundred test launches from every angle
+ * caught 67 balls in the left scoop and none at all in the right, and it was
+ * reported from play before the test was written: "because of the purple line
+ * the right side scoop is unreachable".
+ */
+function scoopThroat(centre: Vec, radius: number, mouth: readonly [Vec, Vec]): [Segment, Segment] {
+  const [p, q] = scoopOpening(centre, radius, mouth);
+  const d = (a: Vec, b: Vec) => Math.hypot(a.x - b.x, a.y - b.y);
+  const straight = d(mouth[0], p) + d(mouth[1], q);
+  const crossed = d(mouth[0], q) + d(mouth[1], p);
+  return straight <= crossed
+    ? [segment(mouth[0], p, 4), segment(mouth[1], q, 4)]
+    : [segment(mouth[0], q, 4), segment(mouth[1], p, 4)];
+}
+
+/** The arc a bowl's wall covers: everything the opening does not. */
+function scoopArc(centre: Vec, radius: number, mouth: readonly [Vec, Vec]): Segment[] {
+  const to = Math.atan2(
+    (mouth[0].y + mouth[1].y) / 2 - centre.y,
+    (mouth[0].x + mouth[1].x) / 2 - centre.x,
+  );
+  return arcToSegments(centre, radius, to + SCOOP_HALF_OPEN, to + Math.PI * 2 - SCOOP_HALF_OPEN, 20);
 }
 
 /**
@@ -739,18 +855,44 @@ function scoopLips(): {
  * is no step where they meet.
  */
 function scoops(): Collider[] {
-  const rad = (deg: number) => (deg * Math.PI) / 180;
   return [
-    // The left chamber is open from -24 to 76 degrees, so its wall is the rest.
-    ...solid('scoopwall', arcToSegments(SCOOP_LEFT_CENTRE, SCOOP_R, rad(76), rad(336), 20), PLASTIC),
-    // The right one is open from 104 to 204, so its wall runs the other way round.
-    ...solid('scoopwall', arcToSegments(SCOOP_RIGHT_CENTRE, SCOOP_R, rad(204), rad(464), 20), PLASTIC),
-    // The catch itself is a sensor at the back of each chamber, not the wall. A
-    // ball that merely clips the mouth on its way past is not caught; it has to
-    // get far enough in that the picture agrees it went in.
-    sensorCircle('scoop-left', SCOOP_LEFT_CENTRE, 20),
-    sensorCircle('scoop-right', SCOOP_RIGHT_CENTRE, 20),
+    // The bowl walls. The left is open from -30 to 70 degrees, so its wall is
+    // the rest of the circle; the right is open from 110 to 210.
+    ...solid('scoopwall', scoopArc(SCOOP_LEFT_CENTRE, SCOOP_LEFT_R, SCOOP_LEFT_MOUTH), PLASTIC),
+    ...solid('scoopwall', scoopArc(SCOOP_RIGHT_CENTRE, SCOOP_RIGHT_R, SCOOP_RIGHT_MOUTH), PLASTIC),
+    // The throat: two short walls from the gap in the playfield wall into the
+    // bowl, so the ball is funnelled rather than dropped into a slot.
+    ...solid('scoopwall', [
+      ...scoopThroat(SCOOP_LEFT_CENTRE, SCOOP_LEFT_R, SCOOP_LEFT_MOUTH),
+      ...scoopThroat(SCOOP_RIGHT_CENTRE, SCOOP_RIGHT_R, SCOOP_RIGHT_MOUTH),
+    ], PLASTIC),
+    // The catch is a sensor at the back of each bowl, not the wall. A ball that
+    // merely clips the mouth on its way past is not caught; it has to get far
+    // enough in that the picture agrees it went in.
+    sensorCircle('scoop-left', SCOOP_LEFT_CENTRE, 18),
+    sensorCircle('scoop-right', SCOOP_RIGHT_CENTRE, 18),
   ];
+}
+
+/**
+ * The shutter across each mouth, closed while the scoop reloads.
+ *
+ * A bowl is a dead end and the ball only gets out because the scoop fires it, so
+ * a ball that rolls in while the coil is still busy has nowhere to go. The
+ * shutter is the same trick as the portcullis: solid exactly when the hole is
+ * not ready to take a ball, and open the rest of the time. Without it the scoop
+ * is a trap for the length of its own cooldown.
+ */
+function scoopShutters(): Collider[] {
+  return [SCOOP_LEFT_MOUTH, SCOOP_RIGHT_MOUTH].map((mouth, i) => ({
+    id: `scoop-shutter-${i}`,
+    type: 'segment' as const,
+    seg: segment(mouth[0], mouth[1], 5),
+    material: PLASTIC,
+    kick: 0,
+    sensor: false,
+    active: false,
+  }));
 }
 
 /** The painted lamp lenses, as rollovers the ball lights by passing over them. */
@@ -766,9 +908,9 @@ function laneSensors(): Collider[] {
     // where a ball rolling down the guide rail actually is, which is a ball's
     // radius plus the rail's above the rail itself, not level with it.
     ...sensor('outlane-left', [segment(vec(180, 1330), vec(232, 1330))]),
-    ...sensor('inlane-left', [segment(vec(252, 1234), vec(300, 1242))]),
+    ...sensor('inlane-left', [segment(vec(258, 1237), vec(308, 1250))]),
     ...sensor('outlane-right', [segment(vec(761, 1330), vec(813, 1330))]),
-    ...sensor('inlane-right', [segment(vec(693, 1242), vec(741, 1234))]),
+    ...sensor('inlane-right', [segment(vec(685, 1250), vec(735, 1237))]),
   ];
 }
 
@@ -787,23 +929,37 @@ export interface Scoop {
   readonly hold: Vec;
   readonly eject: Vec;
   readonly mouth: Vec;
+  /** Solid while the coil reloads, so a ball cannot enter a bowl it cannot leave. */
+  readonly shutter: Collider;
 }
 
-function scoopList(): Scoop[] {
-  const lips = scoopLips();
-  const build = (name: string, centre: Vec, a: Vec, b: Vec): Scoop => {
-    const mouth = vec((a.x + b.x) / 2, (a.y + b.y) / 2);
-    // Park it a little behind the middle, so the ball sits in the chamber rather
-    // than in its doorway.
-    const hold = vec(centre.x + (centre.x - mouth.x) * 0.2, centre.y + (centre.y - mouth.y) * 0.2);
+function scoopList(shutters: Collider[]): Scoop[] {
+  const build = (name: string, centre: Vec, radius: number,
+                 gap: readonly [Vec, Vec], shutter: Collider): Scoop => {
+    const mouth = vec((gap[0].x + gap[1].x) / 2, (gap[0].y + gap[1].y) / 2);
+    // Park it a little behind the middle of the bowl, so the ball sits in the
+    // dish rather than in its doorway, and the picture explains where it went.
+    const hold = vec(centre.x + (centre.x - mouth.x) * 0.14, centre.y + (centre.y - mouth.y) * 0.14);
     const dx = mouth.x - hold.x;
     const dy = mouth.y - hold.y;
     const d = Math.hypot(dx, dy) || 1;
-    return { id: name, centre, radius: SCOOP_R, hold, eject: vec(dx / d, dy / d), mouth };
+
+    // Out of the mouth, and then tilted half a radian UP the table.
+    //
+    // Straight along the mouth the left scoop fired the ball flat across at the
+    // height of the target bank, from where it came back down the same wall and
+    // fell into the same hole. One measured game did that for three hundred
+    // seconds and never ended. A real coil throws the ball up the playfield, and
+    // up is also what breaks the loop: the ball goes somewhere it has to be
+    // played back from rather than somewhere it merely returns from.
+    const tilt = dx > 0 ? -SCOOP_TILT : SCOOP_TILT;
+    const ex = (dx / d) * Math.cos(tilt) - (dy / d) * Math.sin(tilt);
+    const ey = (dx / d) * Math.sin(tilt) + (dy / d) * Math.cos(tilt);
+    return { id: name, centre, radius, hold, eject: vec(ex, ey), mouth, shutter };
   };
   return [
-    build('scoop-left', SCOOP_LEFT_CENTRE, lips.leftUpper, lips.leftLower),
-    build('scoop-right', SCOOP_RIGHT_CENTRE, lips.rightUpper, lips.rightLower),
+    build('scoop-left', SCOOP_LEFT_CENTRE, SCOOP_LEFT_R, SCOOP_LEFT_MOUTH, shutters[0]!),
+    build('scoop-right', SCOOP_RIGHT_CENTRE, SCOOP_RIGHT_R, SCOOP_RIGHT_MOUTH, shutters[1]!),
   ];
 }
 
@@ -816,6 +972,8 @@ export interface Table {
   readonly targets: Collider[];
   /** The two holes. The game owns the hold timer; the table owns the geometry. */
   readonly scoops: Scoop[];
+  /** How many lamp lenses there are, so the game knows when the set is complete. */
+  readonly lampCount: number;
 }
 
 /**
@@ -848,6 +1006,7 @@ export function buildTable(): Table {
 
   const targets = dropTargets();
   const gate = portcullis();
+  const shutters = scoopShutters();
 
   const colliders: Collider[] = [
     ...leftWall(),
@@ -859,6 +1018,7 @@ export function buildTable(): Table {
     gate,
     ...bumpers(),
     ...scoops(),
+    ...shutters,
     ...laneGuides(),
     ...slingshots(),
     ...targets,
@@ -866,5 +1026,8 @@ export function buildTable(): Table {
     ...laneSensors(),
   ];
 
-  return { colliders, laneGate, portcullis: gate, targets, scoops: scoopList() };
+  return {
+    colliders, laneGate, portcullis: gate, targets,
+    scoops: scoopList(shutters), lampCount: LAMPS.length,
+  };
 }

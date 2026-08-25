@@ -189,7 +189,10 @@ describe('the ball stays on the table', () => {
     for (let x = 190; x <= 810; x += 20) {
       for (let y = 1000; y <= 1340; y += 20) {
         const { g, drained } = dropAt({ x, y });
-        if (drained || onAFlipper(g)) continue;
+        // A ball being held by a scoop is standing still on purpose, and the
+        // hold is on a timer, so it is not a trap. Everything else that is not
+        // moving and not on a bat is.
+        if (drained || onAFlipper(g) || g.scoopHold !== null) continue;
         const moving = Math.hypot(g.ball.vel.x, g.ball.vel.y) > 25;
         if (!moving) {
           stuck.push(`(${x}, ${y}) -> (${Math.round(g.ball.pos.x)}, ${Math.round(g.ball.pos.y)})`);
