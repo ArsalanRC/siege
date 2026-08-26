@@ -1,14 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import type { Game, GameEvent, Input } from '../src/engine/game.js';
 import { createGame, stepGame, readout, NO_INPUT, BALLS_PER_GAME, PLUNGER_CHARGE_TIME } from '../src/engine/game.js';
-import { TABLE_W, TABLE_H, DRAIN_Y, LANE_X } from '../src/engine/table.js';
-
-/* The ball is meant to fall clear of the bottom edge before it counts as lost,
- * so "still on the table" reaches past the picture, not just to it. */
-const BELOW_BOARD = DRAIN_Y + 120;
+import { DRAIN_Y, LANE_X } from '../src/engine/table.js';
 import { BALL_RADIUS } from '../src/engine/physics.js';
 import { vec } from '../src/engine/vec.js';
-import { flipperSegment } from '../src/engine/flipper.js';
 
 const DT = 1 / 120;
 
@@ -106,101 +101,11 @@ describe('the plunger', () => {
 });
 
 describe('the ball stays on the table', () => {
-  // The table geometry is written by hand, so a gap between two walls is a
-  // typo rather than a physics failure, and it looks identical from the outside.
-  it('never leaves the bounds over a long unattended ball', () => {
-    const g = createGame();
-    launch(g);
-    for (let i = 0; i < 8000; i++) {
-      stepGame(g, NO_INPUT, DT);
-      expect(g.ball.pos.x).toBeGreaterThan(-BALL_RADIUS);
-      expect(g.ball.pos.x).toBeLessThan(TABLE_W + BALL_RADIUS);
-      expect(g.ball.pos.y).toBeGreaterThan(-BALL_RADIUS);
-      expect(g.ball.pos.y).toBeLessThan(BELOW_BOARD);
-    }
-  });
-
-  it('stays inside while the flippers are being hammered', () => {
-    const g = createGame();
-    launch(g);
-    const next = rng(0x51e6e);
-    let left = false;
-    let right = false;
-    for (let i = 0; i < 12000; i++) {
-      if (i % 12 === 0) {
-        left = next() > 0.5;
-        right = next() > 0.5;
-      }
-      stepGame(g, press({ left, right, plunger: true }), DT);
-      expect(g.ball.pos.x).toBeGreaterThan(-BALL_RADIUS);
-      expect(g.ball.pos.x).toBeLessThan(TABLE_W + BALL_RADIUS);
-      expect(g.ball.pos.y).toBeGreaterThan(-BALL_RADIUS);
-      expect(g.ball.pos.y).toBeLessThan(BELOW_BOARD);
-    }
-  });
-
-  /**
-   * Drop a ball at rest at `at` and report where it has got to after `seconds`.
-   *
-   * The flippers are left alone, so anything that stops has stopped for a reason
-   * in the geometry rather than because nobody pressed a button.
-   */
-  function dropAt(at: { x: number; y: number }, seconds = 4) {
-    const g = createGame();
-    g.phase = 'playing';
-    g.ball = { ...g.ball, pos: vec(at.x, at.y), vel: vec(0, 1) };
-    g.ballSave = 0;
-    g.saveSpent = true;
-    let drained = false;
-    for (let t = 0; t < seconds && !drained; t += DT) {
-      drained = stepGame(g, NO_INPUT, DT).some((e) => e.kind === 'drain');
-    }
-    return { g, drained };
-  }
-
-  /** True if the ball is sitting on a bat, which is the one place it may rest. */
-  function onAFlipper(g: Game): boolean {
-    for (const f of [g.left, g.right]) {
-      const seg = flipperSegment(f);
-      const dx = seg.b.x - seg.a.x, dy = seg.b.y - seg.a.y;
-      const l2 = dx * dx + dy * dy;
-      const t = l2 === 0 ? 0 : Math.max(0, Math.min(1, ((g.ball.pos.x - seg.a.x) * dx + (g.ball.pos.y - seg.a.y) * dy) / l2));
-      const d = Math.hypot(g.ball.pos.x - (seg.a.x + t * dx), g.ball.pos.y - (seg.a.y + t * dy));
-      if (d <= BALL_RADIUS + f.radius + 6) return true;
-    }
-    return false;
-  }
-
-  it('has nowhere in the lower playfield a still ball can be left', () => {
-    // Three separate traps formed around the slingshots, all the same shape: a
-    // channel that narrows below the width of a ball, which the ball can enter
-    // from the wide end and then not fit through. All three were found by
-    // playing, never by a test, and all three looked completely fine in a
-    // screenshot.
-    //
-    // The old version of this measured the distance between pairs of colliders,
-    // which worked while the slingshot was a single line and stopped working the
-    // moment it became a triangle: the closest approach between the far edge of
-    // a triangle and a wall runs straight through the solid middle of the
-    // triangle, so it reported channels that do not exist. This drops a real ball
-    // into every part of the lower table instead and asks whether it ever gets
-    // out, which is the question the pair distance was only ever standing in for.
-    const stuck: string[] = [];
-    for (let x = 190; x <= 810; x += 20) {
-      for (let y = 1000; y <= 1340; y += 20) {
-        const { g, drained } = dropAt({ x, y });
-        // A ball being held by a scoop is standing still on purpose, and the
-        // hold is on a timer, so it is not a trap. Everything else that is not
-        // moving and not on a bat is.
-        if (drained || onAFlipper(g) || g.scoopHold !== null) continue;
-        const moving = Math.hypot(g.ball.vel.x, g.ball.vel.y) > 25;
-        if (!moving) {
-          stuck.push(`(${x}, ${y}) -> (${Math.round(g.ball.pos.x)}, ${Math.round(g.ball.pos.y)})`);
-        }
-      }
-    }
-    expect(stuck, `balls came to rest off the flippers: ${stuck.join('; ')}`).toEqual([]);
-  });
+  // The properties that hold for ANY board live in tables.test.ts and run
+  // against every one of them: staying inside the bounds, never being left
+  // standing still, always draining when left alone, and not dribbling back
+  // down the shooter lane. What is left here is what is true of the castle in
+  // particular.
 
   it('brings a launched ball down the right orbit and into the middle', () => {
     // Reported from play, not caught here: at full power the ball went up the
@@ -258,34 +163,6 @@ describe('the ball stays on the table', () => {
     }
   });
 
-  it('never lets the ball come to rest somewhere it cannot leave', () => {
-    // A flat horizontal wall is a permanent trap on a table seen from above,
-    // and the castle roof was one. The ball settled on it and stayed, with
-    // nothing thrown and nothing to see. Left alone, every ball must drain.
-    for (const charge of [0.2, 0.5, 0.8, 1]) {
-      const g = createGame();
-      launch(g, charge);
-
-      let drained = false;
-      for (let i = 0; i < 7200 && !drained; i++) {
-        drained = stepGame(g, NO_INPUT, DT).some((e) => e.kind === 'drain');
-      }
-
-      expect(drained, `a ball launched at ${charge} charge never drained`).toBe(true);
-    }
-  });
-
-  it('does not let the ball dribble back down the shooter lane', () => {
-    // The one-way gate exists for this. A ball that gets back into the lane
-    // with no plunger left to hit it is a game that cannot continue.
-    const g = createGame();
-    launch(g);
-    run(g, 6);
-    if (readout(g).phase === 'playing') {
-      const inLane = g.ball.pos.x > LANE_X && g.ball.pos.y > 600;
-      expect(inLane).toBe(false);
-    }
-  });
 });
 
 describe('losing balls', () => {

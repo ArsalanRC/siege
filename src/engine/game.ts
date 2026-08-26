@@ -28,11 +28,9 @@ import type { Ball, Hit, World, Collider } from './physics.js';
 import { step as stepPhysics, BALL_RADIUS, GRAVITY } from './physics.js';
 import type { Flipper } from './flipper.js';
 import { createFlipper, stepFlipper, flipperColliders } from './flipper.js';
-import type { Table } from './table.js';
-import {
-  buildTable, DRAIN_Y, LANE_X, PLUNGER_REST, SCOOP_KICK,
-  FLIPPER_PIVOT_LEFT, FLIPPER_PIVOT_RIGHT,
-} from './table.js';
+import type { Table, TableId } from './table.js';
+import { SCOOP_KICK } from './table.js';
+import { buildTable, DEFAULT_TABLE } from './tables/index.js';
 
 export const BALLS_PER_GAME = 3;
 
@@ -144,13 +142,13 @@ export interface Game {
   lampsLit: Set<string>;
 }
 
-export function createGame(): Game {
-  const table = buildTable();
+export function createGame(tableId: TableId = DEFAULT_TABLE): Game {
+  const table = buildTable(tableId);
   return {
     table,
-    ball: { pos: PLUNGER_REST, vel: vec(0, 0), radius: BALL_RADIUS },
-    left: createFlipper('left', FLIPPER_PIVOT_LEFT),
-    right: createFlipper('right', FLIPPER_PIVOT_RIGHT),
+    ball: { pos: table.plungerRest, vel: vec(0, 0), radius: BALL_RADIUS },
+    left: createFlipper('left', table.pivots.left),
+    right: createFlipper('right', table.pivots.right),
     phase: 'ready',
     score: 0,
     ballNumber: 1,
@@ -170,7 +168,7 @@ export function createGame(): Game {
 
 /** Park a fresh ball in the shooter lane and wait for the plunger. */
 function serve(g: Game): void {
-  g.ball = { pos: PLUNGER_REST, vel: vec(0, 0), radius: BALL_RADIUS };
+  g.ball = { pos: g.table.plungerRest, vel: vec(0, 0), radius: BALL_RADIUS };
   g.plungerCharge = 0;
   g.phase = 'ready';
   g.cooldowns.clear();
@@ -348,7 +346,7 @@ function updateGates(g: Game): void {
   // solid on the way back down, and since it is angled the ball is turned out
   // onto the table instead, which is what the curved exit does on a real
   // machine.
-  const climbingTheLane = g.ball.pos.x > LANE_X && g.ball.vel.y < 0;
+  const climbingTheLane = g.ball.pos.x > g.table.laneX && g.ball.vel.y < 0;
   g.table.laneGate.active = !climbingTheLane;
 
   // The portcullis never comes down on the ball's head.
@@ -412,7 +410,7 @@ function updatePlunger(g: Game, input: Input, dt: number): void {
 
 /** Lost down the middle, or out of a side lane. */
 function checkDrain(g: Game, events: GameEvent[]): void {
-  if (g.ball.pos.y <= DRAIN_Y) return;
+  if (g.ball.pos.y <= g.table.drainY) return;
 
   // Saved. The ball comes straight back and nothing else about the game moves:
   // same ball number, same siege level, same targets. Only the save is spent.
