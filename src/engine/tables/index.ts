@@ -15,6 +15,7 @@
 
 import type { Table, TableId } from '../table.js';
 import { buildSiege } from './siege.js';
+import { buildNova } from './nova.js';
 
 export interface TableEntry {
   readonly id: TableId;
@@ -25,6 +26,7 @@ export interface TableEntry {
 
 export const TABLES: readonly TableEntry[] = [
   { id: 'siege', name: 'SIEGE', build: buildSiege },
+  { id: 'nova', name: 'NOVA', build: buildNova },
 ];
 
 export const TABLE_IDS: readonly TableId[] = TABLES.map((t) => t.id);
