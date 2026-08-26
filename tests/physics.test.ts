@@ -217,8 +217,9 @@ describe('moving surfaces', () => {
     const pivot = vec(500, 1000);
     const moving: MovingCollider = {
       id: 'bat',
-      seg: segment(pivot, vec(650, 1000), 12),
+      segmentAt: () => segment(pivot, vec(650, 1000), 12),
       material: RUBBER,
+      sweep: 0,
       surfaceVelocity: (p) => pointVelocity(p, pivot, -30),
     };
     const w = makeWorld([], [moving]);

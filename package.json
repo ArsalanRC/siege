@@ -17,7 +17,7 @@
   "sideEffects": false,
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "build:site": "tsc -p tsconfig.site.json",
+    "build:site": "tsc -p tsconfig.site.json && node tools/stamp-version.mjs",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
