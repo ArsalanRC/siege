@@ -11,13 +11,13 @@
  * underneath as a single image and this becomes an overlay you can toggle.
  */
 
-import { createGame, stepGame, readout, PLUNGER_CHARGE_TIME } from './lib/engine/game.js?v=17';
-import { flipperSegment, flipperSegments, flipperTip, BAT_SPRITE, batDroop } from './lib/engine/flipper.js?v=17';
-import { TABLE_W, TABLE_H, LANE_X, DRAIN_Y } from './lib/engine/table.js?v=17';
-import { CASTLE_LEFT, CASTLE_RIGHT, CASTLE_TOP, ROOF_FALL, RAIL_IMAGE_TOP, RAIL_IMAGE_H } from './lib/engine/tables/siege.js?v=17';
-import { NOVA_ART } from './lib/engine/tables/nova.js?v=17';
-import { TABLES } from './lib/engine/tables/index.js?v=17';
-import { applyLanguage, toggleLanguage, currentLanguage, t } from './i18n.js?v=17';
+import { createGame, stepGame, readout, PLUNGER_CHARGE_TIME } from './lib/engine/game.js?v=22';
+import { flipperSegment, flipperSegments, flipperTip, BAT_SPRITE, batDroop } from './lib/engine/flipper.js?v=22';
+import { TABLE_W, TABLE_H, LANE_X, DRAIN_Y } from './lib/engine/table.js?v=22';
+import { CASTLE_LEFT, CASTLE_RIGHT, CASTLE_TOP, ROOF_FALL, RAIL_IMAGE_TOP, RAIL_IMAGE_H } from './lib/engine/tables/siege.js?v=22';
+import { NOVA_ART } from './lib/engine/tables/nova.js?v=22';
+import { TABLES } from './lib/engine/tables/index.js?v=22';
+import { applyLanguage, toggleLanguage, currentLanguage, t } from './i18n.js?v=22';
 
 /**
  * Which board is on, remembered.
@@ -110,8 +110,11 @@ const trail = [];
 const art = {
   // Shared across both boards: the ball and the bat are the same parts in the
   // same cabinet, so they are loaded once and never cleared on a switch.
-  ball: null, flipper: null,
-  // Board specific, replaced whenever the board changes.
+  ball: null,
+  // Board specific, replaced whenever the board changes. The bat is in here too
+  // now: the two machines do not share one, and the sprite carries its own
+  // hinge and tip fractions in BAT_SPRITES.
+  flipper: null,
   playfield: null, habitrail: null, railRise: null, railFall: null,
   station: null, bumper: null, target: null, scoopRim: null, sling: null,
   gantry: null, lens: null,
@@ -127,12 +130,14 @@ const art = {
  */
 const BOARD_ART = {
   siege: {
+    flipper: 'flipper.png',
     playfield: 'siege/playfield.jpg',
     habitrail: 'siege/habitrail.png',
     railRise: 'siege/rail-rise.png',
     railFall: 'siege/rail-fall.png',
   },
   nova: {
+    flipper: 'nova/flipper.png',
     playfield: 'nova/playfield.jpg',
     station: 'nova/station.png',
     bumper: 'nova/bumper.png',
@@ -190,11 +195,10 @@ function loadArt(name, file) {
 // where PNG cost 3.1 MB against 859 KB for the same image as JPEG. The sprites
 // are drawn on top of it and their alpha is the entire point, so they stay PNG.
 loadArt('ball', 'ball.png');
-loadArt('flipper', 'flipper.png');
 
 /** Drop the outgoing board's art and fetch the incoming board's. */
 function loadBoardArt(id) {
-  for (const key of ['playfield', 'habitrail', 'railRise', 'railFall',
+  for (const key of ['playfield', 'habitrail', 'railRise', 'railFall', 'flipper',
                     'station', 'bumper', 'target', 'scoopRim', 'sling', 'gantry', 'lens']) art[key] = null;
   for (const [key, file] of Object.entries(BOARD_ART[id] ?? {})) loadArt(key, file);
 }
@@ -735,8 +739,30 @@ function drawLights(now) {
   }
 }
 
+/**
+ * Each board's bat, in fractions of its own sprite.
+ *
+ * Measured off the alpha, never guessed, exactly as the castle's was. NOVA's bat
+ * is the better behaved of the two: its spine runs almost dead level inside its
+ * image, two units of drop across 512, where the castle's is drawn at 3.3
+ * degrees and has to have that taken back out. The droop is computed from the
+ * drawn size either way, because the image is scaled by different factors across
+ * and down, so the angle its spine makes on screen depends on how big it is
+ * drawn. Treating it as a constant put the castle's right bat visibly off its
+ * pivot.
+ */
+const BAT_SPRITES = {
+  siege: BAT_SPRITE,
+  nova: { hingeX: 0.100, hingeY: 0.486, tipX: 0.998, farX: 0.900, farY: 0.505, hingeHalf: 0.486 },
+};
+
+function batDroopFor(spec, w, h) {
+  return Math.atan2((spec.farY - spec.hingeY) * h, (spec.farX - spec.hingeX) * w);
+}
+
 function drawFlipper(f, image) {
   const seg = flipperSegment(f);
+  const spec = BAT_SPRITES[game.table.id] ?? BAT_SPRITE;
 
   if (image) {
     ctx.save();
@@ -763,9 +789,9 @@ function drawFlipper(f, image) {
     // hinge and twice as fat at the tip, which is the "different shape" that got
     // reported. Now the hinge lands on the pivot, the tip lands on the tip, and
     // the half-height at the hinge is exactly the collision radius.
-    const span = BAT_SPRITE.tipX - BAT_SPRITE.hingeX;
+    const span = spec.tipX - spec.hingeX;
     const w = f.length / span;
-    const h = f.radius / BAT_SPRITE.hingeHalf;
+    const h = f.radius / spec.hingeHalf;
 
     // The artist drew the bat at a slight angle inside its own image. That is a
     // property of the picture, not of the machine, so it comes back out here
@@ -776,9 +802,9 @@ function drawFlipper(f, image) {
     // and measuring where the sprite's tip actually landed said otherwise: 26.9
     // units off with the sign flipped, 1.3 units off without. The flip is
     // applied to the frame the rotation is measured in, so the two cancel.
-    ctx.rotate(-batDroop(w, h));
+    ctx.rotate(-batDroopFor(spec, w, h));
 
-    ctx.drawImage(image, -BAT_SPRITE.hingeX * w, -BAT_SPRITE.hingeY * h, w, h);
+    ctx.drawImage(image, -spec.hingeX * w, -spec.hingeY * h, w, h);
     ctx.restore();
     return;
   }
@@ -1171,9 +1197,34 @@ function drawNova(now) {
     }
   }
 
-  drawScoops();
+  novaScoops();
   novaLamps();
   drawLights(now);
+}
+
+/**
+ * NOVA's wormholes, drawn on the bowl the ball is actually caught in.
+ *
+ * The castle's version paints a gold lip across the opening only, because its
+ * bowls are painted into the playfield image underneath and all that is missing
+ * is the state. There is no painting under these, so the whole collar is drawn,
+ * centred on the collider and sized from its radius.
+ *
+ * Dimmed while the coil reloads, which is the one thing the player needs to know
+ * about a hole: whether it will take the ball right now.
+ */
+function novaScoops() {
+  if (!art.scoopRim) {
+    drawScoops();
+    return;
+  }
+  for (const s of game.table.scoops) {
+    const ready = !game.cooldowns.has(s.id);
+    ctx.save();
+    ctx.globalAlpha = ready ? 1 : 0.45;
+    drawSpriteOn(art.scoopRim, { c: s.centre, radius: s.radius }, 1.3);
+    ctx.restore();
+  }
 }
 
 /**
@@ -1199,6 +1250,22 @@ function novaLamps() {
     // actually catches the ball.
     const r = c.circle.radius * 0.7;
     const on = lit.has(c.id);
+
+    // The painted lens, when there is one. Unlit it is dimmed rather than
+    // hidden, because the player needs to see which beacons are left to collect
+    // and this board has no lenses printed into the deck underneath.
+    if (art.lens) {
+      ctx.save();
+      // No additive bloom on top. The painted lens already has a lit dome and a
+      // specular highlight in it, and adding a `lighter` gradient over twenty-one
+      // of them turned the board back into the field of pale discs the drawn
+      // version produced. Lit is the sprite at full strength, unlit is the same
+      // sprite dimmed, and that is the whole difference.
+      ctx.globalAlpha = on ? 1 : 0.32;
+      drawSpriteOn(art.lens, c.circle, 0.95);
+      ctx.restore();
+      continue;
+    }
 
     ctx.save();
     ctx.fillStyle = on ? 'rgb(255 206 118 / 0.13)' : 'rgb(120 165 200 / 0.05)';
