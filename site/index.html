@@ -17,7 +17,7 @@
       Bump the number whenever style.css or app.js changes. It costs one edit and
       it means a plain reload is enough.
     -->
-    <link rel="stylesheet" href="style.css?v=22" />
+    <link rel="stylesheet" href="style.css?v=24" />
   </head>
   <body>
     <header class="bar">
@@ -78,6 +78,11 @@
         <button id="touch-plunger" type="button" class="pad narrow">▲</button>
         <button id="touch-right" type="button" class="pad">▶</button>
       </div>
+
+      <!-- Discoverability. A gesture nobody is told about is a gesture nobody
+           uses, and this one is the only way to change machine on a phone,
+           where the header buttons are tight. -->
+      <p class="swipe-hint" data-i18n="touch.swipe">Swipe across the table to change machine</p>
     </main>
 
     <footer class="bar">
@@ -85,6 +90,6 @@
       <a href="https://github.com/ArsalanRC/siege" rel="noreferrer">Source</a>
     </footer>
 
-    <script type="module" src="app.js?v=22"></script>
+    <script type="module" src="app.js?v=24"></script>
   </body>
 </html>

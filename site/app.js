@@ -11,13 +11,13 @@
  * underneath as a single image and this becomes an overlay you can toggle.
  */
 
-import { createGame, stepGame, readout, PLUNGER_CHARGE_TIME } from './lib/engine/game.js?v=22';
-import { flipperSegment, flipperSegments, flipperTip, BAT_SPRITE, batDroop } from './lib/engine/flipper.js?v=22';
-import { TABLE_W, TABLE_H, LANE_X, DRAIN_Y } from './lib/engine/table.js?v=22';
-import { CASTLE_LEFT, CASTLE_RIGHT, CASTLE_TOP, ROOF_FALL, RAIL_IMAGE_TOP, RAIL_IMAGE_H } from './lib/engine/tables/siege.js?v=22';
-import { NOVA_ART } from './lib/engine/tables/nova.js?v=22';
-import { TABLES } from './lib/engine/tables/index.js?v=22';
-import { applyLanguage, toggleLanguage, currentLanguage, t } from './i18n.js?v=22';
+import { createGame, stepGame, readout, PLUNGER_CHARGE_TIME } from './lib/engine/game.js?v=24';
+import { flipperSegment, flipperSegments, flipperTip, BAT_SPRITE, batDroop } from './lib/engine/flipper.js?v=24';
+import { TABLE_W, TABLE_H, LANE_X, DRAIN_Y } from './lib/engine/table.js?v=24';
+import { CASTLE_LEFT, CASTLE_RIGHT, CASTLE_TOP, ROOF_FALL, RAIL_IMAGE_TOP, RAIL_IMAGE_H } from './lib/engine/tables/siege.js?v=24';
+import { NOVA_ART } from './lib/engine/tables/nova.js?v=24';
+import { TABLES } from './lib/engine/tables/index.js?v=24';
+import { applyLanguage, toggleLanguage, currentLanguage, t } from './i18n.js?v=24';
 
 /**
  * Which board is on, remembered.
@@ -182,9 +182,25 @@ function drawRailArt(image, spec, a, b) {
   ctx.restore();
 }
 
-function loadArt(name, file) {
+/**
+ * Which set of board art is current. Bumped on every switch.
+ *
+ * Without it, changing board twice quickly leaves the two boards' art mixed.
+ * `loadBoardArt` clears the keys and starts fresh loads, but the OUTGOING
+ * board's images are still in flight, and whichever decodes last wins the key
+ * it was asked for. Swiping siege to nova and straight back drew nova's deck
+ * and nova's bats under siege's wordmark, with the castle's habitrail over the
+ * top, which is exactly what it sounds like: two machines at once.
+ *
+ * A load now checks it is still wanted before it writes anything.
+ */
+let artEpoch = 0;
+
+/** `epoch: null` for art that belongs to no board and must never be discarded. */
+function loadArt(name, file, epoch = artEpoch) {
   const img = new Image();
   img.onload = () => {
+    if (epoch !== null && epoch !== artEpoch) return;
     art[name] = img;
   };
   img.src = `art/${file}`;
@@ -194,10 +210,11 @@ function loadArt(name, file) {
 // purpose. The background covers the whole canvas and needs no transparency,
 // where PNG cost 3.1 MB against 859 KB for the same image as JPEG. The sprites
 // are drawn on top of it and their alpha is the entire point, so they stay PNG.
-loadArt('ball', 'ball.png');
+loadArt('ball', 'ball.png', null);
 
 /** Drop the outgoing board's art and fetch the incoming board's. */
 function loadBoardArt(id) {
+  artEpoch += 1;
   for (const key of ['playfield', 'habitrail', 'railRise', 'railFall', 'flipper',
                     'station', 'bumper', 'target', 'scoopRim', 'sling', 'gantry', 'lens']) art[key] = null;
   for (const [key, file] of Object.entries(BOARD_ART[id] ?? {})) loadArt(key, file);
@@ -1437,16 +1454,25 @@ function applyBoardChrome() {
   const next = TABLES[(TABLES.findIndex((b) => b.id === boardId) + 1) % TABLES.length];
   if (el.wordmark) el.wordmark.textContent = here.name;
   if (el.board) {
-    el.board.textContent = next.name;
+    // The glyph matters. A button whose whole label is the other board's name
+    // reads as "you are on NOVA" just as easily as "switch to NOVA", and those
+    // are opposite meanings. An arrow settles it.
+    el.board.textContent = `\u21c4 ${next.name}`;
     el.board.setAttribute('aria-label', `${t('nav.board')}: ${next.name}`);
   }
   if (el.levelLabel) el.levelLabel.textContent = t(boardId === 'nova' ? 'hud.wave' : 'hud.siege');
   document.title = `${here.name} · ${t('meta.tagline')}`;
 }
 
-function cycleBoard() {
+/** Move `step` boards along the list, wrapping. The button is just step = 1. */
+function stepBoard(step) {
   const i = TABLES.findIndex((b) => b.id === boardId);
-  selectBoard(TABLES[(i + 1) % TABLES.length].id);
+  const next = (i + step + TABLES.length) % TABLES.length;
+  selectBoard(TABLES[next].id);
+}
+
+function cycleBoard() {
+  stepBoard(1);
 }
 
 const KEYS = {
@@ -1503,12 +1529,36 @@ bindPad('touch-plunger', 'plunger');
  * A phone player should not have to find a button. Which half decides which
  * flipper, and the bottom strip winds the plunger.
  */
+/**
+ * Swipe across the board to change machine, which is the phone's version of the
+ * header button.
+ *
+ * It has to share the canvas with the flippers, and the flippers cannot wait:
+ * a bat that fires on pointerUP is a bat that arrives after the ball has gone,
+ * so tapping still flips on pointerDOWN exactly as before. A swipe is therefore
+ * recognised at the END of the gesture and simply undoes the flip it caused.
+ * A stray flick of a bat with no ball near it costs nothing; a late flipper
+ * costs the ball.
+ *
+ * The bar is set deliberately high. Switching starts a fresh game, so an
+ * accidental swipe would throw away whatever was in progress: it wants a third
+ * of the board's width, mostly sideways, and inside three quarters of a second.
+ * Nobody does that by accident while playing, and nobody fails to do it on
+ * purpose.
+ */
+const SWIPE_FRACTION = 0.33;
+const SWIPE_SLOPE = 1.8;
+const SWIPE_MS = 750;
+
+let gesture = null;
+
 canvas.addEventListener('pointerdown', (e) => {
   e.preventDefault();
   if (restartIfOver()) return;
   const box = canvas.getBoundingClientRect();
   const x = (e.clientX - box.left) / box.width;
   const y = (e.clientY - box.top) / box.height;
+  gesture = { x: e.clientX, y: e.clientY, at: performance.now(), width: box.width };
   if (y > 0.88) pressAction('plunger');
   else if (x < 0.5) pressAction('left');
   else pressAction('right');
@@ -1520,9 +1570,32 @@ const release = () => {
   releaseAction('plunger');
 };
 
-canvas.addEventListener('pointerup', release);
-canvas.addEventListener('pointercancel', release);
-addEventListener('blur', release);
+/** True if this gesture was a deliberate sideways swipe rather than a tap. */
+function swipeDirection(e) {
+  if (!gesture) return 0;
+  const dx = e.clientX - gesture.x;
+  const dy = e.clientY - gesture.y;
+  if (performance.now() - gesture.at > SWIPE_MS) return 0;
+  if (Math.abs(dx) < gesture.width * SWIPE_FRACTION) return 0;
+  if (Math.abs(dx) < Math.abs(dy) * SWIPE_SLOPE) return 0;
+  return dx < 0 ? 1 : -1;
+}
+
+canvas.addEventListener('pointerup', (e) => {
+  const swipe = swipeDirection(e);
+  gesture = null;
+  release();
+  if (swipe) stepBoard(swipe);
+});
+
+canvas.addEventListener('pointercancel', () => {
+  gesture = null;
+  release();
+});
+addEventListener('blur', () => {
+  gesture = null;
+  release();
+});
 
 el.lang.addEventListener('click', () => {
   toggleLanguage();
