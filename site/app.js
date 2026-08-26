@@ -11,10 +11,11 @@
  * underneath as a single image and this becomes an overlay you can toggle.
  */
 
-import { createGame, stepGame, readout, PLUNGER_CHARGE_TIME } from './lib/engine/game.js?v=11';
-import { flipperSegment, flipperSegments, flipperTip, BAT_SPRITE, batDroop } from './lib/engine/flipper.js?v=11';
-import { TABLE_W, TABLE_H, LANE_X, DRAIN_Y, CASTLE_LEFT, CASTLE_RIGHT, CASTLE_TOP, ROOF_FALL, RAIL_IMAGE_TOP, RAIL_IMAGE_H } from './lib/engine/table.js?v=11';
-import { applyLanguage, toggleLanguage, currentLanguage, t } from './i18n.js?v=11';
+import { createGame, stepGame, readout, PLUNGER_CHARGE_TIME } from './lib/engine/game.js?v=12';
+import { flipperSegment, flipperSegments, flipperTip, BAT_SPRITE, batDroop } from './lib/engine/flipper.js?v=12';
+import { TABLE_W, TABLE_H, LANE_X, DRAIN_Y } from './lib/engine/table.js?v=12';
+import { CASTLE_LEFT, CASTLE_RIGHT, CASTLE_TOP, ROOF_FALL, RAIL_IMAGE_TOP, RAIL_IMAGE_H } from './lib/engine/tables/siege.js?v=12';
+import { applyLanguage, toggleLanguage, currentLanguage, t } from './i18n.js?v=12';
 
 const BEST_KEY = 'siege.best';
 
