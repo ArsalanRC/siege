@@ -11,13 +11,13 @@
  * underneath as a single image and this becomes an overlay you can toggle.
  */
 
-import { createGame, stepGame, readout, PLUNGER_CHARGE_TIME } from './lib/engine/game.js?v=16';
-import { flipperSegment, flipperSegments, flipperTip, BAT_SPRITE, batDroop } from './lib/engine/flipper.js?v=16';
-import { TABLE_W, TABLE_H, LANE_X, DRAIN_Y } from './lib/engine/table.js?v=16';
-import { CASTLE_LEFT, CASTLE_RIGHT, CASTLE_TOP, ROOF_FALL, RAIL_IMAGE_TOP, RAIL_IMAGE_H } from './lib/engine/tables/siege.js?v=16';
-import { NOVA_ART } from './lib/engine/tables/nova.js?v=16';
-import { TABLES } from './lib/engine/tables/index.js?v=16';
-import { applyLanguage, toggleLanguage, currentLanguage, t } from './i18n.js?v=16';
+import { createGame, stepGame, readout, PLUNGER_CHARGE_TIME } from './lib/engine/game.js?v=17';
+import { flipperSegment, flipperSegments, flipperTip, BAT_SPRITE, batDroop } from './lib/engine/flipper.js?v=17';
+import { TABLE_W, TABLE_H, LANE_X, DRAIN_Y } from './lib/engine/table.js?v=17';
+import { CASTLE_LEFT, CASTLE_RIGHT, CASTLE_TOP, ROOF_FALL, RAIL_IMAGE_TOP, RAIL_IMAGE_H } from './lib/engine/tables/siege.js?v=17';
+import { NOVA_ART } from './lib/engine/tables/nova.js?v=17';
+import { TABLES } from './lib/engine/tables/index.js?v=17';
+import { applyLanguage, toggleLanguage, currentLanguage, t } from './i18n.js?v=17';
 
 /**
  * Which board is on, remembered.
@@ -112,7 +112,9 @@ const art = {
   // same cabinet, so they are loaded once and never cleared on a switch.
   ball: null, flipper: null,
   // Board specific, replaced whenever the board changes.
-  playfield: null, habitrail: null, railRise: null, railFall: null, station: null,
+  playfield: null, habitrail: null, railRise: null, railFall: null,
+  station: null, bumper: null, target: null, scoopRim: null, sling: null,
+  gantry: null, lens: null,
 };
 
 /**
@@ -133,6 +135,12 @@ const BOARD_ART = {
   nova: {
     playfield: 'nova/playfield.jpg',
     station: 'nova/station.png',
+    bumper: 'nova/bumper.png',
+    target: 'nova/target.png',
+    scoopRim: 'nova/scoop.png',
+    sling: 'nova/sling.png',
+    gantry: 'nova/gantry.png',
+    lens: 'nova/lens.png',
   },
 };
 
@@ -186,7 +194,8 @@ loadArt('flipper', 'flipper.png');
 
 /** Drop the outgoing board's art and fetch the incoming board's. */
 function loadBoardArt(id) {
-  for (const key of ['playfield', 'habitrail', 'railRise', 'railFall', 'station']) art[key] = null;
+  for (const key of ['playfield', 'habitrail', 'railRise', 'railFall',
+                    'station', 'bumper', 'target', 'scoopRim', 'sling', 'gantry', 'lens']) art[key] = null;
   for (const [key, file] of Object.entries(BOARD_ART[id] ?? {})) loadArt(key, file);
 }
 
@@ -1003,6 +1012,37 @@ function glowSegment(seg, colour, glow, width) {
   strokeSegment(seg, colour, width);
 }
 
+/**
+ * Lay a sprite along a collider, so its own middle runs down the line the ball
+ * actually touches.
+ *
+ * The image is drawn with its horizontal centreline mapped onto `a`..`b`, which
+ * means a part can only ever appear along the thing it collides with. Same rule
+ * as the castle's habitrail and its two supplied rails: the drawing is placed
+ * from the geometry, never traced next to it.
+ */
+function drawSpriteAlong(image, a, b, thickness) {
+  const len = Math.hypot(b.x - a.x, b.y - a.y);
+  ctx.save();
+  ctx.translate((a.x + b.x) / 2, (a.y + b.y) / 2);
+  ctx.rotate(Math.atan2(b.y - a.y, b.x - a.x));
+  ctx.drawImage(image, -len / 2, -thickness / 2, len, thickness);
+  ctx.restore();
+}
+
+/**
+ * A sprite centred on a circular collider, drawn `spread` times its radius.
+ *
+ * `spread` is above one for the bumpers on purpose. A real pop bumper's plastic
+ * cap is wider than the skirt the ball actually touches, so a cap painted at 59
+ * against a collider of 36 is the real part rather than a mismatch. The castle
+ * measured that ratio at 1.64 off its own art.
+ */
+function drawSpriteOn(image, circle, spread) {
+  const r = circle.radius * spread;
+  ctx.drawImage(image, circle.c.x - r, circle.c.y - r, r * 2, r * 2);
+}
+
 function novaDeck() {
   if (art.playfield) {
     ctx.drawImage(art.playfield, 0, 0, TABLE_W, TABLE_H);
@@ -1068,6 +1108,10 @@ function drawNova(now) {
     if (c.type === 'circle') {
       const { c: p, radius } = c.circle;
       const isBumper = c.id.startsWith('bumper');
+      if (isBumper && art.bumper) {
+        drawSpriteOn(art.bumper, c.circle, 1.55);
+        continue;
+      }
       ctx.save();
       ctx.fillStyle = isBumper ? 'rgb(38 26 12 / 0.9)' : 'rgb(18 30 44 / 0.9)';
       ctx.beginPath();
@@ -1095,11 +1139,19 @@ function drawNova(now) {
     const seg = c.seg;
     if (!seg) continue;
     const id = c.id;
-    if (id.startsWith('gantry')) glowSegment(seg, NOVA.rail, NOVA.railGlow, 7);
-    else if (id.startsWith('sling')) glowSegment(seg, NOVA.rose, NOVA.roseGlow, 13);
+    if (id.startsWith('gantry')) {
+      if (art.gantry) drawSpriteAlong(art.gantry, seg.a, seg.b, 46);
+      else glowSegment(seg, NOVA.rail, NOVA.railGlow, 7);
+    } else if (id.startsWith('sling')) {
+      if (art.sling) drawSpriteAlong(art.sling, seg.a, seg.b, 54);
+      else glowSegment(seg, NOVA.rose, NOVA.roseGlow, 13);
+    }
     else if (id.startsWith('triangle')) strokeSegment(seg, 'rgb(255 126 168 / 0.45)', 11);
     // Butt caps, so three targets read as one bar rather than closing their gaps.
-    else if (id.startsWith('target-')) glowSegment(seg, NOVA.amber, NOVA.amberGlow, 13);
+    else if (id.startsWith('target-')) {
+      if (art.target) drawSpriteAlong(art.target, seg.a, seg.b, 76);
+      else glowSegment(seg, NOVA.amber, NOVA.amberGlow, 13);
+    }
     else if (id === 'portcullis') glowSegment(seg, NOVA.rail, NOVA.railGlow, 11);
     else if (id.startsWith('scoopwall')) strokeSegment(seg, 'rgb(195 155 255 / 0.55)', 5);
     else if (id.startsWith('station')) strokeSegment(seg, 'rgb(95 208 255 / 0.35)', 3);
@@ -1109,7 +1161,14 @@ function drawNova(now) {
   // than removed. A shape that vanishes reads as a rendering fault.
   for (const target of game.table.targets) {
     if (target.active || !target.seg) continue;
-    strokeSegment(target.seg, NOVA.dead, 13, 'butt');
+    if (art.target) {
+      ctx.save();
+      ctx.globalAlpha = 0.28;
+      drawSpriteAlong(art.target, target.seg.a, target.seg.b, 76);
+      ctx.restore();
+    } else {
+      strokeSegment(target.seg, NOVA.dead, 13, 'butt');
+    }
   }
 
   drawScoops();
