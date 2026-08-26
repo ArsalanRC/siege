@@ -158,6 +158,15 @@ export interface Flipper {
   readonly radius: number;
   /** Radians, measured from the positive x axis. y points down the screen. */
   readonly angle: number;
+  /**
+   * Where the bat was when the frame began, so the physics can sweep it.
+   *
+   * A bat that is only ever reported at the angle it finished on is a bat the
+   * ball can be standing inside of, and at 60 Hz the tip covers 69 units between
+   * one report and the next. Carrying the previous angle costs one number and
+   * turns the bat from something that teleports into something that travels.
+   */
+  readonly prevAngle: number;
   /** Radians per second, as actually travelled last step, not as requested. */
   readonly omega: number;
   readonly pressed: boolean;
@@ -186,6 +195,7 @@ export function createFlipper(side: Side, pivot: Vec): Flipper {
     length: FLIPPER_LENGTH,
     radius: FLIPPER_RADIUS,
     angle: restAngle(side),
+    prevAngle: restAngle(side),
     omega: 0,
     pressed: false,
   };
@@ -207,18 +217,28 @@ export function stepFlipper(f: Flipper, pressed: boolean, dt: number): Flipper {
   const maxTravel = rate * dt;
 
   if (Math.abs(delta) <= maxTravel) {
-    return { ...f, angle: target, omega: delta / dt, pressed };
+    return { ...f, angle: target, prevAngle: f.angle, omega: delta / dt, pressed };
   }
 
   const travel = Math.sign(delta) * maxTravel;
-  return { ...f, angle: f.angle + travel, omega: travel / dt, pressed };
+  return { ...f, angle: f.angle + travel, prevAngle: f.angle, omega: travel / dt, pressed };
+}
+
+/** Where the bat is pointing `alpha` of the way through the frame it just took. */
+export function angleAt(f: Flipper, alpha: number): number {
+  return f.prevAngle + (f.angle - f.prevAngle) * alpha;
+}
+
+/** How far the tip travels over the whole of that frame. */
+export function flipperSweep(f: Flipper): number {
+  return Math.abs(f.angle - f.prevAngle) * f.length;
 }
 
 /** Where the tip currently is. */
-export function flipperTip(f: Flipper): Vec {
+export function flipperTip(f: Flipper, angle = f.angle): Vec {
   return {
-    x: f.pivot.x + Math.cos(f.angle) * f.length,
-    y: f.pivot.y + Math.sin(f.angle) * f.length,
+    x: f.pivot.x + Math.cos(angle) * f.length,
+    y: f.pivot.y + Math.sin(angle) * f.length,
   };
 }
 
@@ -230,8 +250,8 @@ export function flipperTip(f: Flipper): Vec {
  * the bat and its own hinge would otherwise slip behind the flipper, which
  * looks exactly like a physics bug even when the ball came in legitimately.
  */
-export function flipperSegment(f: Flipper): Segment {
-  return { a: f.pivot, b: flipperTip(f), radius: f.radius };
+export function flipperSegment(f: Flipper, angle = f.angle): Segment {
+  return { a: f.pivot, b: flipperTip(f, angle), radius: f.radius };
 }
 
 /**
@@ -242,23 +262,26 @@ export function flipperSegment(f: Flipper): Segment {
  * below anything a 54 unit ball can feel, and the radius only ever decreases
  * along the chain so the outline stays convex and nothing can catch on a joint.
  */
-export function flipperSegments(f: Flipper): Segment[] {
-  const dir = { x: Math.cos(f.angle), y: Math.sin(f.angle) };
-  const steps = BAT_TAPER.length - 1;
+export function flipperSegments(f: Flipper, angle = f.angle): Segment[] {
   const out: Segment[] = [];
-  for (let i = 0; i < steps; i++) {
-    const t0 = (i / steps) * f.length;
-    const t1 = ((i + 1) / steps) * f.length;
-    // The radius at the middle of this piece, so the chain neither over nor
-    // under-covers the drawn edge.
-    const mid = (BAT_TAPER[i]! + BAT_TAPER[i + 1]!) / 2;
-    out.push({
-      a: { x: f.pivot.x + dir.x * t0, y: f.pivot.y + dir.y * t0 },
-      b: { x: f.pivot.x + dir.x * t1, y: f.pivot.y + dir.y * t1 },
-      radius: f.radius * mid,
-    });
-  }
+  for (let i = 0; i < BAT_TAPER.length - 1; i++) out.push(batPiece(f, i, angle));
   return out;
+}
+
+/** One link of that chain, at a given angle. The physics asks for these one at a time. */
+function batPiece(f: Flipper, i: number, angle: number): Segment {
+  const steps = BAT_TAPER.length - 1;
+  const dir = { x: Math.cos(angle), y: Math.sin(angle) };
+  const t0 = (i / steps) * f.length;
+  const t1 = ((i + 1) / steps) * f.length;
+  // The radius at the middle of this piece, so the chain neither over nor
+  // under-covers the drawn edge.
+  const mid = (BAT_TAPER[i]! + BAT_TAPER[i + 1]!) / 2;
+  return {
+    a: { x: f.pivot.x + dir.x * t0, y: f.pivot.y + dir.y * t0 },
+    b: { x: f.pivot.x + dir.x * t1, y: f.pivot.y + dir.y * t1 },
+    radius: f.radius * mid,
+  };
 }
 
 /**
@@ -272,25 +295,36 @@ export function flipperSegments(f: Flipper): Segment[] {
 export function flipperColliders(f: Flipper): MovingCollider[] {
   const pivot = f.pivot;
   const omega = f.omega;
-  return flipperSegments(f).map((seg) => ({
-    id: `flipper-${f.side}`,
-    seg,
-    material: FLIPPER_MATERIAL,
-    surfaceVelocity(point: Vec): Vec {
-      return pointVelocity(point, pivot, omega);
-    },
-  }));
+  const sweep = flipperSweep(f);
+  const out: MovingCollider[] = [];
+  for (let i = 0; i < BAT_TAPER.length - 1; i++) {
+    out.push({
+      id: `flipper-${f.side}`,
+      material: FLIPPER_MATERIAL,
+      sweep,
+      // Its own link only, rebuilt at whatever instant the physics asks for.
+      // Every link reports the same `sweep`, which is the tip's, so the frame is
+      // cut fine enough for the fastest part of the bat rather than for the part
+      // that happens to be asked first.
+      segmentAt: (alpha: number): Segment => batPiece(f, i, angleAt(f, alpha)),
+      surfaceVelocity(point: Vec): Vec {
+        return pointVelocity(point, pivot, omega);
+      },
+    });
+  }
+  return out;
 }
 
 /** The whole bat as one capsule. Kept for the parts that only need its spine. */
 export function flipperCollider(f: Flipper): MovingCollider {
-  const seg = flipperSegment(f);
   const pivot = f.pivot;
   const omega = f.omega;
+  const sweep = flipperSweep(f);
   return {
     id: `flipper-${f.side}`,
-    seg,
     material: FLIPPER_MATERIAL,
+    sweep,
+    segmentAt: (alpha: number): Segment => flipperSegment(f, angleAt(f, alpha)),
     surfaceVelocity(point: Vec): Vec {
       return pointVelocity(point, pivot, omega);
     },

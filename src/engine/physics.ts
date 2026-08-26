@@ -161,12 +161,35 @@ export interface Collider {
  * so `surfaceVelocity` takes the contact point rather than being one number for
  * the whole bat. That difference is the entire reason a tip shot is worth
  * aiming for.
+ *
+ * ## Why this is a function of time and not a fixed segment
+ *
+ * It used to be a plain `seg`, sampled once where the bat finished the frame,
+ * and that is a hole big enough to swing a bat through. The ball is substepped
+ * and the bat was not, so the bat teleported across its whole frame of rotation
+ * while the collision only ever saw it at the far end.
+ *
+ * The size of the hole grows with distance from the pivot, because that is what
+ * `omega * r` does. At 32 rad/s and 60 Hz the bat turns 0.53 radians a frame, so
+ * a point 80 units out jumps 43 units and the tip jumps 69, both further than a
+ * 54 unit ball is wide. A measured sweep of a ball resting on the bat: every
+ * station from the pivot out to 70 launched it, and every station from 80 to the
+ * tip missed it completely and left the bat on the other side. That is exactly
+ * the two things reported from play, "the corners have no hitbox" and "it goes
+ * through the back entirely", and they were one bug.
+ *
+ * So the surface is asked where it is at `alpha` through the frame, and `sweep`
+ * lets the substep count be sized from the bat's own travel as well as the
+ * ball's.
  */
 export interface MovingCollider {
   readonly id: string;
-  readonly seg: Segment;
   readonly material: Material;
+  /** Where this surface is `alpha` through the frame: 0 at its start, 1 at its end. */
+  segmentAt(alpha: number): Segment;
   surfaceVelocity(point: Vec): Vec;
+  /** How far the fastest point on this surface travels over the whole frame. */
+  readonly sweep: number;
 }
 
 export interface World {
@@ -191,14 +214,22 @@ export interface StepResult {
 }
 
 /**
- * How many substeps this frame needs, from how far the ball would otherwise go.
+ * How many substeps this frame needs, from how far anything would otherwise go.
  *
  * The `+ gravity * dt` term matters. A ball at the top of its arc is momentarily
  * slow, and sizing the step from that speed alone under-counts the step it is
  * about to accelerate into.
+ *
+ * `sweep` is the same question asked about the moving surfaces, and leaving it
+ * out was a real defect rather than an optimisation. A ball dawdling at 200
+ * units a second needs exactly one substep and gets one, and a bat swung at that
+ * dawdling ball crosses 69 units inside it. The frame has to be cut fine enough
+ * for the fastest thing in it, and that is not always the ball.
  */
-export function substepsFor(speed: number, dt: number, radius: number, gravity: number): number {
-  const reach = (speed + gravity * dt) * dt;
+export function substepsFor(
+  speed: number, dt: number, radius: number, gravity: number, sweep = 0,
+): number {
+  const reach = Math.max((speed + gravity * dt) * dt, sweep);
   const limit = radius * MAX_STEP_FRACTION;
   if (reach <= limit) return 1;
   return Math.min(MAX_SUBSTEPS, Math.ceil(reach / limit));
@@ -264,7 +295,7 @@ function contactFor(ball: Ball, c: Collider): Contact | null {
  * the substeps are short enough that a single pass leaves no visible
  * penetration. Iterating would cost time and buy nothing.
  */
-function integrate(ball: Ball, world: World, dt: number, hits: Hit[]): Ball {
+function integrate(ball: Ball, world: World, dt: number, hits: Hit[], alpha: number): Ball {
   const gravityStep: Vec = { x: 0, y: world.gravity * dt };
   let vel = add(ball.vel, gravityStep);
 
@@ -295,7 +326,8 @@ function integrate(ball: Ball, world: World, dt: number, hits: Hit[]): Ball {
   }
 
   for (const m of world.moving) {
-    const contact = ballVsSegment(next.pos, next.radius, m.seg);
+    // Where the bat is at THIS instant, not where it ends the frame.
+    const contact = ballVsSegment(next.pos, next.radius, m.segmentAt(alpha));
     if (!contact) continue;
 
     const surfaceVel = m.surfaceVelocity(contact.point);
@@ -318,12 +350,19 @@ function integrate(ball: Ball, world: World, dt: number, hits: Hit[]): Ball {
 export function step(ball: Ball, world: World, dt: number): StepResult {
   const hits: Hit[] = [];
   const frame = Math.min(Math.max(dt, 0), MAX_DT);
-  const n = substepsFor(len(ball.vel), frame, ball.radius, world.gravity);
+
+  // The frame is cut for whichever moves furthest, the ball or a bat.
+  let sweep = 0;
+  for (const m of world.moving) if (m.sweep > sweep) sweep = m.sweep;
+
+  const n = substepsFor(len(ball.vel), frame, ball.radius, world.gravity, sweep);
   const slice = frame / n;
 
   let current = ball;
   for (let i = 0; i < n; i++) {
-    current = integrate(current, world, slice, hits);
+    // The bat is sampled at the end of each substep, which is where the ball
+    // has just been moved to, so the two are read at the same instant.
+    current = integrate(current, world, slice, hits, (i + 1) / n);
   }
 
   return { ball: current, hits };
