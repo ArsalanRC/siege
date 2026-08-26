@@ -14,15 +14,20 @@
 const STRINGS = {
   en: {
     'meta.title': 'SIEGE · a pinball table with hand-written physics',
+    'meta.tagline': 'a pinball table with hand-written physics',
     'meta.description':
-      'Three balls and one castle. Knock the targets down, the gate opens, storm the keep. Every bounce is worked out from scratch, with no physics library anywhere.',
+      'Two machines in one cabinet. Storm a castle or dock at a station. Every bounce is worked out from scratch, with no physics library anywhere.',
 
     'nav.debug': 'Geometry',
+    'nav.board': 'Change machine',
 
     'hud.score': 'Score',
     'hud.best': 'Best',
     'hud.ball': 'Ball',
     'hud.siege': 'Siege',
+    // NOVA counts the same thing the castle calls a siege, so the word changes
+    // and nothing else does.
+    'hud.wave': 'Wave',
 
     'overlay.ready': 'Wind the plunger',
     'overlay.hint': 'Hold Space, then let go. The arrow keys work the flippers.',
@@ -34,15 +39,18 @@ const STRINGS = {
 
   de: {
     'meta.title': 'SIEGE · Flipper mit selbst gerechneter Physik',
+    'meta.tagline': 'Flipper mit selbst gerechneter Physik',
     'meta.description':
-      'Drei Kugeln, eine Burg. Erst alle Ziele umlegen, dann öffnet sich das Tor. Jeder Aufprall ist von Hand gerechnet, ganz ohne Physik-Bibliothek.',
+      'Zwei Geräte in einem Gehäuse. Einmal die Burg stürmen, einmal an der Station andocken. Jeder Aufprall ist von Hand gerechnet, ganz ohne Physik-Bibliothek.',
 
     'nav.debug': 'Geometrie',
+    'nav.board': 'Gerät wechseln',
 
     'hud.score': 'Punkte',
     'hud.best': 'Bestwert',
     'hud.ball': 'Kugel',
     'hud.siege': 'Sturm',
+    'hud.wave': 'Welle',
 
     'overlay.ready': 'Abschuss spannen',
     'overlay.hint': 'Leertaste halten und loslassen. Die Pfeiltasten steuern die Flipper.',

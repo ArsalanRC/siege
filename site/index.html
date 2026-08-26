@@ -17,7 +17,7 @@
       Bump the number whenever style.css or app.js changes. It costs one edit and
       it means a plain reload is enough.
     -->
-    <link rel="stylesheet" href="style.css?v=12" />
+    <link rel="stylesheet" href="style.css?v=16" />
   </head>
   <body>
     <header class="bar">
@@ -26,6 +26,7 @@
         <!-- Back to the portfolio. Every hosted page of mine should offer the
              way home, and this one did not. -->
         <a class="ghost" href="https://arsalanrc.github.io" rel="noreferrer">Portfolio</a>
+        <button id="board" type="button" class="ghost" data-i18n-attr="title" data-i18n="nav.board" title="">NOVA</button>
         <button id="lang" type="button" class="ghost" aria-label="Sprache wechseln">DE</button>
         <button id="debug" type="button" class="ghost" data-i18n="nav.debug">Geometry</button>
       </nav>
@@ -67,7 +68,7 @@
           <span class="value" id="ball">1</span>
       </div>
         <div class="panel">
-          <span class="label" data-i18n="hud.siege">Siege</span>
+          <span class="label" id="level-label">Siege</span>
           <span class="value" id="siege">1</span>
       </div>
       </div>
@@ -84,6 +85,6 @@
       <a href="https://github.com/ArsalanRC/siege" rel="noreferrer">Source</a>
     </footer>
 
-    <script type="module" src="app.js?v=12"></script>
+    <script type="module" src="app.js?v=16"></script>
   </body>
 </html>

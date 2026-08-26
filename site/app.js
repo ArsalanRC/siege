@@ -11,13 +11,22 @@
  * underneath as a single image and this becomes an overlay you can toggle.
  */
 
-import { createGame, stepGame, readout, PLUNGER_CHARGE_TIME } from './lib/engine/game.js?v=12';
-import { flipperSegment, flipperSegments, flipperTip, BAT_SPRITE, batDroop } from './lib/engine/flipper.js?v=12';
-import { TABLE_W, TABLE_H, LANE_X, DRAIN_Y } from './lib/engine/table.js?v=12';
-import { CASTLE_LEFT, CASTLE_RIGHT, CASTLE_TOP, ROOF_FALL, RAIL_IMAGE_TOP, RAIL_IMAGE_H } from './lib/engine/tables/siege.js?v=12';
-import { applyLanguage, toggleLanguage, currentLanguage, t } from './i18n.js?v=12';
+import { createGame, stepGame, readout, PLUNGER_CHARGE_TIME } from './lib/engine/game.js?v=16';
+import { flipperSegment, flipperSegments, flipperTip, BAT_SPRITE, batDroop } from './lib/engine/flipper.js?v=16';
+import { TABLE_W, TABLE_H, LANE_X, DRAIN_Y } from './lib/engine/table.js?v=16';
+import { CASTLE_LEFT, CASTLE_RIGHT, CASTLE_TOP, ROOF_FALL, RAIL_IMAGE_TOP, RAIL_IMAGE_H } from './lib/engine/tables/siege.js?v=16';
+import { NOVA_ART } from './lib/engine/tables/nova.js?v=16';
+import { TABLES } from './lib/engine/tables/index.js?v=16';
+import { applyLanguage, toggleLanguage, currentLanguage, t } from './i18n.js?v=16';
 
-const BEST_KEY = 'siege.best';
+/**
+ * Which board is on, remembered.
+ *
+ * The best score is stored per board, because two boards do not share a high
+ * score any more than two machines in an arcade do. One key each.
+ */
+const BOARD_KEY = 'siege.board';
+const bestKeyFor = (id) => `siege.best.${id}`;
 
 const canvas = document.getElementById('table');
 const ctx = canvas.getContext('2d');
@@ -33,12 +42,19 @@ const el = {
   plungerFill: document.getElementById('plunger-fill'),
   lang: document.getElementById('lang'),
   debug: document.getElementById('debug'),
+  board: document.getElementById('board'),
+  wordmark: document.querySelector('.wordmark'),
+  levelLabel: document.getElementById('level-label'),
   geokey: document.getElementById('geokey'),
 };
 
-let game = createGame();
+const KNOWN_BOARDS = TABLES.map((b) => b.id);
+let boardId = localStorage.getItem(BOARD_KEY) ?? 'siege';
+if (!KNOWN_BOARDS.includes(boardId)) boardId = 'siege';
+
+let game = createGame(boardId);
 let showGeometry = false;
-let best = Number(localStorage.getItem(BEST_KEY) ?? 0) || 0;
+let best = Number(localStorage.getItem(bestKeyFor(boardId)) ?? 0) || 0;
 
 /*
  * Input, latched so a press always lasts at least one frame.
@@ -91,7 +107,34 @@ const trail = [];
  * that the two sides disagree, and they sit side by side where any difference
  * is immediately obvious.
  */
-const art = { playfield: null, ball: null, flipper: null, habitrail: null, railRise: null, railFall: null };
+const art = {
+  // Shared across both boards: the ball and the bat are the same parts in the
+  // same cabinet, so they are loaded once and never cleared on a switch.
+  ball: null, flipper: null,
+  // Board specific, replaced whenever the board changes.
+  playfield: null, habitrail: null, railRise: null, railFall: null, station: null,
+};
+
+/**
+ * Which files each board wants, by the key the drawing reads them back out of.
+ *
+ * A board is allowed to be missing any of them. That is not an error state, it
+ * is simply where the art has got to, and every draw path below falls back to
+ * something drawn from the colliders. NOVA shipped playable with two of its nine
+ * pieces done.
+ */
+const BOARD_ART = {
+  siege: {
+    playfield: 'siege/playfield.jpg',
+    habitrail: 'siege/habitrail.png',
+    railRise: 'siege/rail-rise.png',
+    railFall: 'siege/rail-fall.png',
+  },
+  nova: {
+    playfield: 'nova/playfield.jpg',
+    station: 'nova/station.png',
+  },
+};
 
 /**
  * Where each supplied rail's own axis runs inside its image, in image pixels.
@@ -138,12 +181,16 @@ function loadArt(name, file) {
 // purpose. The background covers the whole canvas and needs no transparency,
 // where PNG cost 3.1 MB against 859 KB for the same image as JPEG. The sprites
 // are drawn on top of it and their alpha is the entire point, so they stay PNG.
-loadArt('playfield', 'playfield.jpg');
 loadArt('ball', 'ball.png');
 loadArt('flipper', 'flipper.png');
-loadArt('habitrail', 'habitrail.png');
-loadArt('railRise', 'rail-rise.png');
-loadArt('railFall', 'rail-fall.png');
+
+/** Drop the outgoing board's art and fetch the incoming board's. */
+function loadBoardArt(id) {
+  for (const key of ['playfield', 'habitrail', 'railRise', 'railFall', 'station']) art[key] = null;
+  for (const [key, file] of Object.entries(BOARD_ART[id] ?? {})) loadArt(key, file);
+}
+
+loadBoardArt(boardId);
 
 /* ---------- drawing ---------- */
 
@@ -625,16 +672,43 @@ function drawLowerRails() {
 }
 
 /** Everything the geometry cannot say: lit inserts, the open gate, the siege. */
+/**
+ * The middle of whatever this board's main gate is, and how big to light it.
+ *
+ * Both boards have one: the castle's portcullis and NOVA's bay shutter are the
+ * same part. Sizing the glow from the gate's own width means it frames the shot
+ * on either board instead of being a disc somebody chose once.
+ */
+function gateCentre() {
+  const seg = game.table.portcullis.seg;
+  if (!seg) return { x: TABLE_W / 2, y: 400, radius: 110 };
+  const width = Math.hypot(seg.b.x - seg.a.x, seg.b.y - seg.a.y);
+  return {
+    x: (seg.a.x + seg.b.x) / 2,
+    y: (seg.a.y + seg.b.y) / 2,
+    radius: Math.max(70, width * 0.85),
+  };
+}
+
 function drawLights(now) {
   const r = readout(game);
 
   if (r.gateOpen) {
+    // Read off the gate itself rather than written down here.
+    //
+    // It used to be a fixed (LANE_X / 2, 400) with a radius of 120, which is
+    // roughly over the castle's arch and nowhere near NOVA's docking bay. On the
+    // space board it put a 240 unit amber disc across the middle of the station
+    // hull, pulsing, for as long as the bay was open. A hardcoded coordinate in
+    // shared drawing code is the same defect as a hardcoded collider, and it is
+    // caught the same way: ask the table.
+    const gate = gateCentre();
     const pulse = 0.55 + 0.45 * Math.sin(now / 160);
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = `rgb(216 168 66 / ${0.35 * pulse})`;
+    ctx.fillStyle = `rgb(216 168 66 / ${0.30 * pulse})`;
     ctx.beginPath();
-    ctx.arc(LANE_X / 2, 400, 120, 0, Math.PI * 2);
+    ctx.arc(gate.x, gate.y, gate.radius, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
@@ -895,23 +969,225 @@ function buildGeometryKey() {
     `<small>dashed = sensor · red = switched off</small>`;
 }
 
+/* ---------- NOVA ---------- */
+
+/**
+ * The space board is drawn as lit parts on a dark deck, from its colliders.
+ *
+ * The castle's drawing is a painting with state layered over it, because its art
+ * is one flat image that came first. NOVA is the other way round: the geometry
+ * was authored and the art is separate pieces fitted to it, so anything without
+ * a piece yet is drawn from the collider that is already there. Nothing here
+ * needs a coordinate of its own, which is why the board was playable and looked
+ * finished with two of its nine pieces done.
+ *
+ * The look is a consequence of that rather than a style choice. A lit edge is
+ * the honest way to draw a shape whose only definition is a line the ball
+ * bounces off.
+ */
+const NOVA = {
+  rail: '#5fd0ff',
+  railGlow: 'rgb(95 208 255 / 0.20)',
+  amber: '#ffb648',
+  amberGlow: 'rgb(255 182 72 / 0.22)',
+  violet: '#c39bff',
+  violetGlow: 'rgb(195 155 255 / 0.22)',
+  rose: '#ff7ea8',
+  roseGlow: 'rgb(255 126 168 / 0.22)',
+  dead: 'rgb(120 140 160 / 0.30)',
+};
+
+/** A lit line: a wide soft pass for the bloom, then a bright core on top. */
+function glowSegment(seg, colour, glow, width) {
+  strokeSegment(seg, glow, width * 3.2);
+  strokeSegment(seg, colour, width);
+}
+
+function novaDeck() {
+  if (art.playfield) {
+    ctx.drawImage(art.playfield, 0, 0, TABLE_W, TABLE_H);
+    return;
+  }
+  const g = ctx.createLinearGradient(0, 0, 0, TABLE_H);
+  g.addColorStop(0, '#0a1220');
+  g.addColorStop(1, '#050a12');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, TABLE_W, TABLE_H);
+}
+
+/**
+ * The station hull, scaled onto the box its own colliders occupy.
+ *
+ * The sprite is cropped to its silhouette, so its bounds ARE this box and there
+ * is no offset for anyone to get wrong. Its painted docking bay sits at centre
+ * fraction 0.499 of that silhouette and the collision bay is at 0.494, so the
+ * two land within three units of each other without a number being chosen.
+ */
+function novaStation() {
+  const s = NOVA_ART.station;
+  const left = Math.min(...s.leftFace.map(([x]) => x));
+  const top = Math.min(s.rightTop, ...s.leftFace.map(([, y]) => y));
+  const w = s.rightX - left;
+  const h = s.bottom - top;
+
+  if (art.station) {
+    ctx.drawImage(art.station, left, top, w, h);
+    return;
+  }
+  ctx.save();
+  ctx.fillStyle = 'rgb(22 32 46 / 0.92)';
+  ctx.strokeStyle = NOVA.rail;
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(...s.leftFace[0]);
+  for (const [x, y] of s.leftFace.slice(1)) ctx.lineTo(x, y);
+  ctx.lineTo(s.rightX, s.bottom);
+  ctx.lineTo(s.rightX, s.rightTop);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawNova(now) {
+  novaDeck();
+
+  // Walls and rails first, so everything solid sits on top of them.
+  for (const c of game.table.colliders) {
+    if (!c.active || c.sensor || !c.seg) continue;
+    const id = c.id;
+    if (id.startsWith('wall')) glowSegment(c.seg, NOVA.rail, NOVA.railGlow, 6);
+    else if (id.startsWith('orbit') || id.startsWith('lane')) glowSegment(c.seg, NOVA.rail, NOVA.railGlow, 5);
+  }
+
+  novaStation();
+
+  for (const c of game.table.colliders) {
+    if (!c.active || c.sensor) continue;
+
+    if (c.type === 'circle') {
+      const { c: p, radius } = c.circle;
+      const isBumper = c.id.startsWith('bumper');
+      ctx.save();
+      ctx.fillStyle = isBumper ? 'rgb(38 26 12 / 0.9)' : 'rgb(18 30 44 / 0.9)';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = isBumper ? NOVA.amber : NOVA.rail;
+      ctx.lineWidth = isBumper ? 7 : 5;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, radius - 3, 0, Math.PI * 2);
+      ctx.stroke();
+      if (isBumper) {
+        ctx.globalCompositeOperation = 'lighter';
+        const g = ctx.createRadialGradient(p.x, p.y, radius * 0.2, p.x, p.y, radius * 1.5);
+        g.addColorStop(0, 'rgb(255 190 90 / 0.42)');
+        g.addColorStop(1, 'rgb(255 170 60 / 0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, radius * 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+      continue;
+    }
+
+    const seg = c.seg;
+    if (!seg) continue;
+    const id = c.id;
+    if (id.startsWith('gantry')) glowSegment(seg, NOVA.rail, NOVA.railGlow, 7);
+    else if (id.startsWith('sling')) glowSegment(seg, NOVA.rose, NOVA.roseGlow, 13);
+    else if (id.startsWith('triangle')) strokeSegment(seg, 'rgb(255 126 168 / 0.45)', 11);
+    // Butt caps, so three targets read as one bar rather than closing their gaps.
+    else if (id.startsWith('target-')) glowSegment(seg, NOVA.amber, NOVA.amberGlow, 13);
+    else if (id === 'portcullis') glowSegment(seg, NOVA.rail, NOVA.railGlow, 11);
+    else if (id.startsWith('scoopwall')) strokeSegment(seg, 'rgb(195 155 255 / 0.55)', 5);
+    else if (id.startsWith('station')) strokeSegment(seg, 'rgb(95 208 255 / 0.35)', 3);
+  }
+
+  // A knocked-down target still occupies its slot, so it is drawn dark rather
+  // than removed. A shape that vanishes reads as a rendering fault.
+  for (const target of game.table.targets) {
+    if (target.active || !target.seg) continue;
+    strokeSegment(target.seg, NOVA.dead, 13, 'butt');
+  }
+
+  drawScoops();
+  novaLamps();
+  drawLights(now);
+}
+
+/**
+ * NOVA's nav beacons, drawn as lenses rather than as glows.
+ *
+ * The castle's `drawLamps` cannot be reused here and the reason is the deck it
+ * assumes. It paints a bright radial gradient in `lighter` mode, which reads as
+ * a warm glow on pale maple and saturates to a near-white disc on a dark one.
+ * Sixteen of those lit at once covered half the board in pale blobs, and the
+ * board looked broken rather than lit.
+ *
+ * The unlit ones are drawn too, which the castle never needed. Its lenses are
+ * painted into the playfield image, so the player can see where they are before
+ * collecting them. NOVA has no paint under these, so without a ring there is
+ * nothing on the board saying what is left to go and get.
+ */
+function novaLamps() {
+  const lit = readout(game).lampsLit;
+  for (const c of game.table.colliders) {
+    if (!c.circle || !c.id.startsWith('lamp-')) continue;
+    const { x, y } = c.circle.c;
+    // Inside the collider, so a lens is never drawn wider than the thing that
+    // actually catches the ball.
+    const r = c.circle.radius * 0.7;
+    const on = lit.has(c.id);
+
+    ctx.save();
+    ctx.fillStyle = on ? 'rgb(255 206 118 / 0.13)' : 'rgb(120 165 200 / 0.05)';
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = on ? 'rgb(255 204 112 / 0.80)' : 'rgb(130 175 210 / 0.24)';
+    ctx.lineWidth = on ? 3 : 2;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.stroke();
+
+    if (on) {
+      ctx.globalCompositeOperation = 'lighter';
+      const g = ctx.createRadialGradient(x, y, r * 0.3, x, y, r * 1.6);
+      g.addColorStop(0, 'rgb(255 200 110 / 0.15)');
+      g.addColorStop(1, 'rgb(255 170 60 / 0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(x, y, r * 1.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
 function render(now) {
   ctx.clearRect(0, 0, TABLE_W, TABLE_H);
 
-  if (art.playfield) ctx.drawImage(art.playfield, 0, 0, TABLE_W, TABLE_H);
-  else drawSurface();
-
-  if (!art.playfield) {
-    drawCastle();
-    drawFurniture();
+  if (game.table.id === 'nova') {
+    drawNova(now);
   } else {
-    drawStateOverArt();
+    if (art.playfield) ctx.drawImage(art.playfield, 0, 0, TABLE_W, TABLE_H);
+    else drawSurface();
+
+    if (!art.playfield) {
+      drawCastle();
+      drawFurniture();
+    } else {
+      drawStateOverArt();
+    }
+    drawHabitrail();
+    drawLamps();
+    drawScoops();
+    drawLowerRails();
+    drawLights(now);
   }
-  drawHabitrail();
-  drawLamps();
-  drawScoops();
-  drawLowerRails();
-  drawLights(now);
+
   drawFlipper(game.left, art.flipper);
   drawFlipper(game.right, art.flipper);
   drawBall();
@@ -934,10 +1210,10 @@ function consume(events) {
     else if (e.kind === 'lamp') flash(e.at.x, e.at.y, 34, '255 236 170', 420);
     else if (e.kind === 'scoopCaught') flash(e.at.x, e.at.y, 70, '255 200 110', 900);
     else if (e.kind === 'scoopFired') flash(e.at.x, e.at.y, 90, '255 240 190', 500);
-    else if (e.kind === 'keepTaken') flash(LANE_X / 2, 300, 200, '255 225 150', 900);
-    else if (e.kind === 'gateOpen') flash(LANE_X / 2, 400, 160, '216 168 66', 700);
+    else if (e.kind === 'keepTaken') flash(gateCentre().x, gateCentre().y, 200, '255 225 150', 900);
+    else if (e.kind === 'gateOpen') flash(gateCentre().x, gateCentre().y, 160, '216 168 66', 700);
     // A save that looks identical to losing a ball teaches the player nothing.
-    else if (e.kind === 'ballSaved') flash(LANE_X / 2, 1300, 240, '120 255 170', 1100);
+    else if (e.kind === 'ballSaved') flash(TABLE_W / 2, 1300, 240, '120 255 170', 1100);
     else if (e.kind === 'gameOver') finish(e.score);
   }
 }
@@ -945,7 +1221,7 @@ function consume(events) {
 function finish(score) {
   if (score > best) {
     best = score;
-    localStorage.setItem(BEST_KEY, String(best));
+    localStorage.setItem(bestKeyFor(boardId), String(best));
   }
 }
 
@@ -1002,10 +1278,49 @@ function updateHud(r) {
 
 function restartIfOver() {
   if (readout(game).phase !== 'gameOver') return false;
-  game = createGame();
+  game = createGame(boardId);
   flashes.length = 0;
   trail.length = 0;
   return true;
+}
+
+/**
+ * Change machine.
+ *
+ * A fresh game rather than carrying the ball across, because the two boards do
+ * not share a drain line, a plunger rest or a pair of flipper pivots, and a ball
+ * mid-flight on one of them is nowhere in particular on the other.
+ */
+function selectBoard(id) {
+  if (!KNOWN_BOARDS.includes(id) || id === boardId) return;
+  boardId = id;
+  localStorage.setItem(BOARD_KEY, boardId);
+  best = Number(localStorage.getItem(bestKeyFor(boardId)) ?? 0) || 0;
+  loadBoardArt(boardId);
+  game = createGame(boardId);
+  flashes.length = 0;
+  trail.length = 0;
+  applyBoardChrome();
+  if (showGeometry) buildGeometryKey();
+  updateHud(readout(game));
+}
+
+/** The wordmark, the picker's label and the level caption all name the board. */
+function applyBoardChrome() {
+  const here = TABLES.find((b) => b.id === boardId);
+  const next = TABLES[(TABLES.findIndex((b) => b.id === boardId) + 1) % TABLES.length];
+  if (el.wordmark) el.wordmark.textContent = here.name;
+  if (el.board) {
+    el.board.textContent = next.name;
+    el.board.setAttribute('aria-label', `${t('nav.board')}: ${next.name}`);
+  }
+  if (el.levelLabel) el.levelLabel.textContent = t(boardId === 'nova' ? 'hud.wave' : 'hud.siege');
+  document.title = `${here.name} · ${t('meta.tagline')}`;
+}
+
+function cycleBoard() {
+  const i = TABLES.findIndex((b) => b.id === boardId);
+  selectBoard(TABLES[(i + 1) % TABLES.length].id);
 }
 
 const KEYS = {
@@ -1086,8 +1401,11 @@ addEventListener('blur', release);
 el.lang.addEventListener('click', () => {
   toggleLanguage();
   el.lang.textContent = currentLanguage() === 'de' ? 'EN' : 'DE';
+  applyBoardChrome();
   updateHud(readout(game));
 });
+
+if (el.board) el.board.addEventListener('click', cycleBoard);
 
 function toggleGeometry() {
   showGeometry = !showGeometry;
@@ -1135,5 +1453,6 @@ window.siege = {
 };
 
 applyLanguage();
+applyBoardChrome();
 el.lang.textContent = currentLanguage() === 'de' ? 'EN' : 'DE';
 requestAnimationFrame(frame);
