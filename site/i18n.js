@@ -20,6 +20,7 @@ const STRINGS = {
 
     'nav.debug': 'Geometry',
     'nav.board': 'Change machine',
+    'touch.swipe': 'Swipe across the table to change machine',
 
     'hud.score': 'Score',
     'hud.best': 'Best',
@@ -45,6 +46,7 @@ const STRINGS = {
 
     'nav.debug': 'Geometrie',
     'nav.board': 'Gerät wechseln',
+    'touch.swipe': 'Zum Wechseln über den Tisch wischen',
 
     'hud.score': 'Punkte',
     'hud.best': 'Bestwert',

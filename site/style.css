@@ -365,3 +365,23 @@ canvas {
     display: none;
   }
 }
+
+/* The swipe hint, shown only where the gesture exists.
+
+   It sits with the touch pad rather than under the board, because that is where
+   somebody's thumbs already are, and it is deliberately quiet: a hint that
+   shouts competes with the table for attention every single frame. */
+.swipe-hint {
+  display: none;
+  margin: 0.5rem 0 0;
+  text-align: center;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: var(--stone-500, #7d7268);
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .swipe-hint {
+    display: block;
+  }
+}
